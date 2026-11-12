@@ -230,26 +230,61 @@
     const cities = [...new Set(sites.map((s) => s.city))].sort();
     content.innerHTML = '';
     const v = h('<div class="view" style="padding-bottom:0"></div>'); content.appendChild(v);
+    /* one-row console like the reference home page: type-ahead CITY / SITE / BUILDING, Filter, My Building, shortcuts */
     const bar = h(`<div class="home-bar">
-      <select id="hCity"><option value="">CITY</option>${cities.map((c) => `<option>${esc(c)}</option>`).join('')}</select>
-      <select id="hSite"><option value="">SITE</option></select>
-      <select id="hBld"><option value="">BUILDING</option></select>
+      <input id="hCity" list="dlCity" placeholder="CITY" autocomplete="off"><datalist id="dlCity">${cities.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+      <input id="hSite" list="dlSite" placeholder="SITE" autocomplete="off"><datalist id="dlSite"></datalist>
+      <input id="hBld" list="dlBld" placeholder="BUILDING" autocomplete="off"><datalist id="dlBld"></datalist>
       <button class="btn accent" id="hFilter">Filter</button><button class="btn" id="hMine">My Building</button>
-      <span style="flex-basis:100%;height:0"></span>
       <button class="btn" data-v="campus-map">Campus Map</button><button class="btn" data-v="workplace-catalog">Workplace</button>
       <button class="btn" data-v="fi-dashboard">FI Dashboard</button><button class="btn" data-v="wr-dashboard">WR Dashboard</button></div>`);
     v.appendChild(bar);
-    const fillSites = () => { const c = bar.querySelector('#hCity').value; bar.querySelector('#hSite').innerHTML = '<option value="">SITE</option>' + sites.filter((s) => !c || s.city === c).map((s) => `<option value="${esc(s.id)}">${esc(s.id)} — ${esc(s.name)}</option>`).join(''); fillBlds(); };
-    const fillBlds = () => { const s = bar.querySelector('#hSite').value; const c = bar.querySelector('#hCity').value; bar.querySelector('#hBld').innerHTML = '<option value="">BUILDING</option>' + blds.filter((b) => (!s || b.site_id === s) && (!c || b.city === c)).map((b) => `<option value="${esc(b.id)}">${esc(b.id)} — ${esc(b.name)}</option>`).join(''); };
-    bar.querySelector('#hCity').onchange = fillSites; bar.querySelector('#hSite').onchange = fillBlds; fillSites();
+    const val = (id) => bar.querySelector(id).value.trim();
+    const codeOf = (s) => s.split(' — ')[0].trim().toUpperCase();
+    const pickCity = () => { const c = val('#hCity').toLowerCase(); return c ? cities.find((x) => x.toLowerCase() === c) || c : ''; };
+    const matchSite = (s) => { const q = val('#hSite'); return !q || s.id === codeOf(q) || s.name.toLowerCase().includes(q.toLowerCase()); };
+    const matchBld = (b) => { const q = val('#hBld'); return !q || b.id === codeOf(q) || b.name.toLowerCase().includes(q.toLowerCase()); };
+    const cityOk = (city) => { const c = pickCity(); return !c || city.toLowerCase() === String(c).toLowerCase(); };
+    const fillLists = () => {
+      const ss = sites.filter((s) => cityOk(s.city));
+      bar.querySelector('#dlSite').innerHTML = ss.map((s) => `<option value="${esc(s.id)} — ${esc(s.name)}">`).join('');
+      bar.querySelector('#dlBld').innerHTML = blds.filter((b) => cityOk(b.city) && (!val('#hSite') || ss.some((s) => s.id === b.site_id && matchSite(s)))).map((b) => `<option value="${esc(b.id)} — ${esc(b.name)}">`).join('');
+    };
+    ['#hCity', '#hSite'].forEach((id) => bar.querySelector(id).addEventListener('input', fillLists)); fillLists();
+    bar.querySelectorAll('input').forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') bar.querySelector('#hFilter').click(); }));
     bar.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => go(b.dataset.v));
 
-    const mapPanel = h(`<div class="panel"><div class="panel-head"><span class="ttl">Buildings</span><span class="sp"></span><span style="color:var(--muted);font-size:12px" id="mapCount"></span></div><div id="map"></div></div>`);
+    const GRID_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><rect x="1" y="1" width="6" height="6" fill="#f59e0b"/><rect x="9" y="1" width="6" height="6" fill="#0f766e"/><rect x="1" y="9" width="6" height="6" fill="#0f766e"/><rect x="9" y="9" width="6" height="6" fill="#f59e0b"/></svg>';
+    const mapPanel = h(`<div class="panel home-panel"><div class="panel-head"><span class="ttl">Buildings</span><button class="icon-plain" id="mapToggle" title="Switch between map and list">${GRID_ICON}</button><span class="sp"></span><span style="color:var(--muted);font-size:12px" id="mapCount"></span></div><div id="map"></div><div id="bldList" hidden></div></div>`);
     v.appendChild(mapPanel);
-    const surveyBox = h('<div></div>'); v.appendChild(surveyBox);
+    const splitter = h('<div class="splitter" title="Drag to resize"></div>'); v.appendChild(splitter);
+    const surveyBox = h('<div class="home-panel"></div>'); v.appendChild(surveyBox);
+
+    /* drag the splitter to resize the map (remembered per browser) */
+    const mapEl = mapPanel.querySelector('#map');
+    try { const hgt = +localStorage.getItem('sonu_map_h'); if (hgt >= 160 && hgt <= 900) mapEl.style.height = hgt + 'px'; } catch (e) {}
+    splitter.onpointerdown = (e) => {
+      const y0 = e.clientY, h0 = mapEl.offsetHeight; splitter.setPointerCapture(e.pointerId);
+      splitter.onpointermove = (m) => { mapEl.style.height = Math.max(160, Math.min(900, h0 + m.clientY - y0)) + 'px'; if (map) map.invalidateSize(); };
+      splitter.onpointerup = () => { splitter.onpointermove = null; try { localStorage.setItem('sonu_map_h', mapEl.offsetHeight); } catch (e2) {} };
+    };
+
+    /* layout icon: switch the Buildings panel between map and list */
+    let current = blds;
+    const drawList = () => {
+      const box = mapPanel.querySelector('#bldList'); box.innerHTML = '';
+      UI.renderInto(box, { type: 'grid', gridTitle: 'Buildings', noToolbar: true, pageSize: 10, rows: () => current,
+        columns: [{ field: 'id', label: 'Building Code' }, { field: 'name', label: 'Building Name' }, { field: 'site_id', label: 'Site' }, { field: 'city', label: 'City' }],
+        rowActions: [{ label: 'Work Requests', onClick: (r) => go('wr-review', { bl_id: r.id }) }] }, ctxBase);
+    };
+    mapPanel.querySelector('#mapToggle').onclick = () => {
+      const showList = !mapEl.hidden; mapEl.hidden = showList; mapPanel.querySelector('#bldList').hidden = !showList;
+      if (showList) drawList(); else if (map) map.invalidateSize();
+    };
 
     let map, layer;
     const drawMap = (list) => {
+      current = list; if (!mapPanel.querySelector('#bldList').hidden) drawList();
       mapPanel.querySelector('#mapCount').textContent = list.length + ' buildings';
       if (!window.L) { mapPanel.querySelector('#map').innerHTML = '<div class="noresults">Map library could not load (offline?).</div>'; return; }
       if (!map) { map = L.map('map', { scrollWheelZoom: false }); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); }
@@ -263,13 +298,13 @@
       })).addTo(map);
       if (list.length) map.fitBounds(L.latLngBounds(list.map((b) => [b.lat, b.lng])).pad(0.2)); else map.setView([25.3, 51.4], 9);
     };
-    const filtered = () => { const c = bar.querySelector('#hCity').value, s = bar.querySelector('#hSite').value, b = bar.querySelector('#hBld').value; return blds.filter((x) => (!c || x.city === c) && (!s || x.site_id === s) && (!b || x.id === b)); };
-    bar.querySelector('#hFilter').onclick = () => drawMap(filtered());
+    const filtered = () => blds.filter((b) => cityOk(b.city) && (!val('#hSite') || sites.some((s) => s.id === b.site_id && matchSite(s))) && matchBld(b));
+    bar.querySelector('#hFilter').onclick = () => { const list = filtered(); if (!list.length) UI.toast('No buildings match the filter.', true); drawMap(list); };
     bar.querySelector('#hMine').onclick = () => { const mine = blds.filter((b) => b.id === user.bl_id); if (!mine.length) return UI.toast('No building is assigned to your profile.', true); drawMap(mine); };
     setTimeout(() => drawMap(blds), 0);
 
     UI.renderInto(surveyBox, {
-      type: 'grid', title: 'We Are Waiting to Hear From You', gridTitle: 'We Are Waiting to Hear From You', table: 'surveys', pageSize: 5,
+      type: 'grid', title: 'We Are Waiting to Hear From You', gridTitle: 'We Are Waiting to Hear From You', table: 'surveys', pageSize: 5, noToolbar: true,
       where: (r) => r.status === 'Pending' && r.requestor === user.username,
       columns: [{ field: 'wr_id', label: 'Work Request' }, { field: 'description', label: 'Description' }, { field: 'bl_id', label: 'Building' }, { field: 'date_completed', label: 'Completed On', type: 'date' }],
       rowActions: [{ label: 'Give Feedback', onClick: (row, ctx, api) => {

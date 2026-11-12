@@ -200,9 +200,9 @@
     const head = panel.querySelector('.panel-head');
     const api = { selected: () => [...state.sel].map((id) => DB.get(cfg.table, id)).filter(Boolean), refresh: () => draw(), rows: () => current };
     const mk = (label, fn, cls = '') => { const b = h(`<button class="btn ${cls}">${esc(label)}</button>`); b.onclick = fn; head.appendChild(b); };
-    mk('Refresh', () => draw());
+    if (!cfg.noToolbar) mk('Refresh', () => draw());
     (cfg.toolbar || []).forEach((t) => mk(t.label, () => t.onClick(ctx, api), t.cls));
-    mk('XLS', () => exportCSV(cfg.title, columns, current));
+    if (!cfg.noToolbar) mk('XLS', () => exportCSV(cfg.title, columns, current));
 
     const thead = panel.querySelector('thead'); const tbody = panel.querySelector('tbody');
     const acts = cfg.rowActions || [];
