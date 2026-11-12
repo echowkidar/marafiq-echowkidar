@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SONU Facilities Portal — Sign In</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/sonu.css">
+<script>try{var t=localStorage.getItem('sonu_theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-wrap">
+    <div class="brand">
+      <svg viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#f59e0b"/><path d="M27 13.5c-1.6-1.6-4-2.5-6.8-2.5-4.2 0-7.2 2.2-7.2 5.6 0 6.6 13.6 4 13.6 9.4 0 2.2-2.2 3.6-5.4 3.6-2.8 0-5.2-1-7-2.8" fill="none" stroke="#062b28" stroke-width="3.4" stroke-linecap="round"/></svg>
+      <span>SONU<small>FACILITIES PORTAL</small></span>
+    </div>
+    <form class="login-card" id="loginForm" autocomplete="on">
+      <h1>Connect</h1>
+      <label for="project">Project</label>
+      <select id="project"><option value="SONU">SONU</option><option value="SONU-TRAINING">SONU Training</option></select>
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" required>
+      <label for="password">Password (case-sensitive)</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <label class="remember"><input type="checkbox" id="remember"> Remember Me</label>
+      <button class="btn-primary" type="submit">Sign In</button>
+      <div class="err" id="err"></div>
+      <div class="hint">Demo portal — all data is fictional. Demo accounts are listed in README.md.</div>
+    </form>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var u = document.getElementById('username').value.trim(), p = document.getElementById('password').value;
+  var r = DB.login(u, p, document.getElementById('project').value);
+  if (!r.ok) { document.getElementById('err').textContent = (r.body && r.body.error) || 'Sign-in failed.'; return; }
+  sessionStorage.setItem('sonu_user', JSON.stringify(r.body.user));
+  try { if (document.getElementById('remember').checked) localStorage.setItem('sonu_remember', r.body.user.username); else localStorage.removeItem('sonu_remember'); } catch (e) {}
+  location.href = 'app.html';
+});
+try { var rem = localStorage.getItem('sonu_remember'); if (rem) { document.getElementById('username').value = rem; document.getElementById('remember').checked = true; } } catch (e) {}
+fetch('/api/auth/me').then(function (r) { if (r.ok) location.replace('app.html'); }).catch(function () {});
+</script>
+</body>
+</html>

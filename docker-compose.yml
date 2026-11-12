@@ -1,0 +1,29 @@
+# Portainer: Stacks → Add stack → Repository → this repo, compose path: docker-compose.yml
+# Required stack environment variable:  SEED_PASSWORD  (password for the demo accounts; min 8 chars, letters + digits)
+# Optional:                             SONU_PORT      (host port, default 8090)
+services:
+  sonu:
+    build: .
+    image: sonu-portal:latest
+    container_name: sonu-portal
+    restart: unless-stopped
+    environment:
+      PORT: 5173
+      TRUST_PROXY: "1"            # behind Cloudflare Tunnel: use CF-Connecting-IP, set Secure cookies on https
+      SEED_PASSWORD: ${SEED_PASSWORD:?Set SEED_PASSWORD in the stack environment variables}
+    ports:
+      - "${SONU_PORT:-8090}:5173"   # Cloudflare Tunnel service URL: http://localhost:8090 (cloudflared on the host)
+    volumes:
+      - sonu-data:/app/data         # SQLite database persists here
+
+    # If cloudflared runs as a Docker container instead, uncomment and use the name of its network,
+    # then set the tunnel's public hostname service to:  http://sonu-portal:5173
+    # networks:
+    #   - cloudflared
+
+volumes:
+  sonu-data:
+
+# networks:
+#   cloudflared:
+#     external: true

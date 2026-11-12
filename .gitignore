@@ -1,0 +1,7 @@
+# Real-data screenshots from the reference system — keep private
+evidence/screenshots/
+node_modules/
+.DS_Store
+Thumbs.db
+data/
+evidence/rea/
