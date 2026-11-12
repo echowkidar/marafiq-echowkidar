@@ -130,7 +130,8 @@
 
   /* ---------- header ---------- */
   const userMenu = document.getElementById('userMenu');
-  document.getElementById('userBtn').onclick = (e) => { e.stopPropagation(); userMenu.classList.toggle('open'); };
+  document.getElementById('userBtn').onclick = (e) => { e.stopPropagation(); closeDrawers(); userMenu.classList.toggle('open'); };
+  document.querySelector('.topbar').addEventListener('click', (e) => { if (!e.target.closest('#userBtn, #userMenu, #mobMenu')) { closeDrawers(); userMenu.classList.remove('open'); } });
   userMenu.querySelectorAll('[data-u]').forEach((a) => a.onclick = () => {
     userMenu.classList.remove('open');
     const u = a.dataset.u;

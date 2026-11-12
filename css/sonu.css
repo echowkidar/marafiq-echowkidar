@@ -103,7 +103,7 @@ button { font-family: inherit; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .drawer { background: #1a272b; } :root:not([data-theme="light"]) .drawer .d-item:hover, :root:not([data-theme="light"]) .drawer .d-item.active { background: var(--panel); } }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.topbar { height: 56px; flex: none; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 12px; }
+.topbar { height: 56px; flex: none; position: relative; z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 12px; }
 .topbar .crumb { flex: 1; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar .crumb b { color: var(--text); }
 .topbar .org { font-weight: 800; color: var(--brand); letter-spacing: 1px; }
@@ -115,7 +115,8 @@ button { font-family: inherit; }
 .menu-pop .who small { color: var(--muted); display: block; }
 .menu-pop a { display: block; padding: 10px 14px; color: var(--text); }
 .menu-pop a:hover { background: var(--row-hover); text-decoration: none; }
-.content { flex: 1; overflow: auto; position: relative; }
+/* isolation keeps Leaflet's high z-index panes (400–1000) inside the content area, below the sidebar drawers */
+.content { flex: 1; overflow: auto; position: relative; isolation: isolate; z-index: 0; }
 
 /* ---------- Views ---------- */
 .view { padding: 0 0 24px; min-height: 100%; background: var(--panel); }
