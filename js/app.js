@@ -287,7 +287,7 @@
       current = list; if (!mapPanel.querySelector('#bldList').hidden) drawList();
       mapPanel.querySelector('#mapCount').textContent = list.length + ' buildings';
       if (!window.L) { mapPanel.querySelector('#map').innerHTML = '<div class="noresults">Map library could not load (offline?).</div>'; return; }
-      if (!map) { map = L.map('map', { scrollWheelZoom: false }); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); }
+      if (!map) { map = L.map('map', { scrollWheelZoom: true, wheelPxPerZoomLevel: 90 }); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); }
       if (layer) layer.remove();
       const colors = {}; const pal = ['#0f766e', '#f59e0b', '#2563eb', '#dc2626', '#7c3aed', '#16a34a', '#db2777', '#0891b2'];
       layer = L.layerGroup(list.map((b) => {
