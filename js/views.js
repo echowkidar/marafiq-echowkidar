@@ -601,7 +601,7 @@
     root.appendChild(panel); const el = panel.lastElementChild;
     if (!window.L) { el.innerHTML = '<div class="noresults">Map library could not load (offline?).</div>'; return; }
     const L = window.L; const map = L.map(el); const blds = DB.all('buildings');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
     const open = {}; DB.all('wr').filter(isOpen).forEach((w) => { open[w.bl_id] = (open[w.bl_id] || 0) + 1; });
     const pal = ['#0f766e', '#f59e0b', '#2563eb', '#dc2626', '#7c3aed', '#16a34a', '#db2777', '#0891b2']; const sites = DB.all('sites').map((s) => s.id);
     blds.forEach((b) => L.circleMarker([b.lat, b.lng], { radius: 9, color: '#062b28', weight: 1, fillColor: pal[sites.indexOf(b.site_id) % pal.length], fillOpacity: 0.85 })

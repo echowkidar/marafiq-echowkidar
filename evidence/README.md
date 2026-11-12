@@ -85,5 +85,21 @@ REA attached read-only over CDP to a separate Chrome profile in which the user s
 
 **How SONU's backend mirrors this.** DWR RPC is replaced with a small REST API. Each server-side workflow rule becomes a per-table business rule in `server/server.js` (validation, status transitions with history, role checks, derived fields). Session login follows SecurityService. The audit log stands in for ARCHIBUS's server-side tracking.
 
-## 7. How SONU maps to it
+## 7. REA comparison: reference portal vs SONU (home page, same Chrome, 929×965)
+
+| Metric (REA `inspect-web-page`) | Reference portal | SONU |
+|---|---|---|
+| Scripts / JS size | 45 scripts / 3,125 KB (ExtJS, DWR, Esri GIS, amCharts, Dynatrace) | 6 scripts / 186 KB (own code, plus Leaflet and Chart.js) |
+| Frames | 2 (navigator plus `viewContent_iframe`) | 1 (hash router, no iframe) |
+| DOM nodes / accessibility nodes | 1,595 / 298 (table-based layout) | 468 / 356 (semantic: buttons, cells, column headers) |
+| Browser storage | Segment `ajs_*`, Dynatrace `rx*`/`dt*` (tracking) | `sonu_user` only (no third-party tracking) |
+| Backend protocol | DWR RPC (`runWorkflowRule`) | REST JSON (`/api/t/:table`, `/api/admin/*`) |
+
+**REA `compare-web-screenshots`:** status `different`, 63% of pixels changed. This is expected from the different branding, colours, logo and map provider. The layout regions match: sidebar with Search / Favorites / 4 modules, CITY · SITE · BUILDING + Filter + My Building, the 4 shortcut buttons, the Buildings map, and the "We Are Waiting to Hear From You" panel.
+
+**Bug found by the comparison and fixed:** SONU's map showed OpenStreetMap "403 Access blocked" tiles. The server sent `Referrer-Policy: same-origin`, so tile requests carried no Referer. It now sends `strict-origin-when-cross-origin`.
+
+**Feature parity:** every task in the reference menu (§3) has a SONU page. Group labels became headings, and the ERP-reports label became a "Release Orders & Invoices" page. SONU adds an Administration module (users, sessions, reference data, activity log) that the contractor account could not see in the reference portal.
+
+## 8. How SONU maps to it
 SONU (`index.html`, `app.html`) reproduces the shell, the full menu tree, the filter/grid/tab/chart/form patterns and the workflow above with its **own branding, colours, logo and fictional data**. No logos, photos, text content or records from the reference system were copied.

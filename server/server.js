@@ -516,7 +516,7 @@ function serveStatic(req, res, url) {
   const f = path.join(ROOT, p);
   fs.readFile(f, (err, data) => {
     if (err) return send(res, 404, 'Not found');
-    res.writeHead(200, { 'Content-Type': (TYPES[path.extname(f)] || 'application/octet-stream') + '; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' });
+    res.writeHead(200, { 'Content-Type': (TYPES[path.extname(f)] || 'application/octet-stream') + '; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
     res.end(data);
   });
 }
