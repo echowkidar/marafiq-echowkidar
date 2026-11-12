@@ -80,7 +80,12 @@ button { font-family: inherit; }
 .side-item.active { background: var(--brand); border-left-color: var(--accent); }
 .side-item .ico { width: 18px; height: 18px; flex: none; opacity: .9; }
 .side-item .lbl { flex: 1; line-height: 1.25; }
-.side-item .chev { opacity: .6; }
+.side-item .chev { opacity: .6; width: 10px; }
+.side-item .chev::before { content: "\203A"; }
+.side-item.active .chev::before { content: "\2039"; }
+/* dim the page while a menu drawer is open (click to close) */
+.nav-overlay { display: none; position: fixed; inset: 0; background: rgba(8, 20, 24, .45); z-index: 25; }
+.shell.drawer-open .nav-overlay { display: block; }
 .side-foot { border-top: 1px solid rgba(255,255,255,.08); }
 .side-foot button { width: 100%; background: var(--brand-ink-2); color: #fff; border: 0; padding: 12px; cursor: pointer; font-size: 16px; }
 .shell.collapsed .sidebar { width: 58px; }
@@ -95,10 +100,14 @@ button { font-family: inherit; }
 .drawer .d-item:hover, .drawer .d-item.active { background: var(--drawer-hi); }
 .drawer .d-item .sq { width: 12px; height: 12px; border-radius: 2px; background: var(--accent); flex: none; }
 .drawer .d-item .t { flex: 1; }
-.drawer .t-group { padding: 14px 16px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-.drawer .t-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; }
+.drawer .t-group { padding: 22px 16px 8px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.drawer h3.ttl { color: var(--text); font-size: 14px; font-weight: 700; padding-bottom: 12px; }
+.drawer .shortcuts.has { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 4px; }
+.drawer .d-item .arr { color: var(--muted); }
+.drawer .t-item { display: flex; align-items: center; gap: 12px; padding: 7px 16px; cursor: pointer; line-height: 1.3; }
 .drawer .t-item:hover { background: var(--row-hover); }
-.drawer .t-item .tico { width: 26px; height: 26px; border-radius: 4px; background: #5b9bd5; color: #fff; display: grid; place-items: center; flex: none; font-size: 13px; }
+.drawer .t-item .tico { width: 26px; height: 26px; border-radius: 4px; background: #5b9bd5; color: #fff; display: grid; place-items: center; flex: none; }
+.drawer .t-item .tico svg { width: 18px; height: 18px; }
 .drawer .t-item .t { flex: 1; }
 .drawer .star { background: none; border: 0; cursor: pointer; font-size: 16px; color: #b8c2c8; padding: 0 2px; }
 .drawer .star.on { color: var(--accent); }

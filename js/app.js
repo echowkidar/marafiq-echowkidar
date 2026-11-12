@@ -39,6 +39,7 @@
       <div class="drawer" id="drawer1"></div>
       <div class="drawer tasks" id="drawer2"></div>
     </aside>
+    <div class="nav-overlay" id="navOverlay"></div>
     <div class="main">
       <header class="topbar">
         <button class="icon-btn mob-only" id="mobMenu" title="Menu">&#9776;</button>
@@ -69,39 +70,67 @@
     { id: 'favorites', title: 'Favorites', icon: 'star' },
     ...MENU.map((m) => ({ id: m.id, title: m.title, icon: m.icon, module: m }))
   ];
-  nav.innerHTML = sideItems.map((s) => `<div class="side-item" data-s="${s.id}" title="${esc(s.title)}"><span class="ico">${ICONS[s.icon] || ''}</span><span class="lbl">${esc(s.title)}</span>${s.id !== 'home' ? '<span class="chev">&#8250;</span>' : ''}</div>`).join('');
+  nav.innerHTML = sideItems.map((s) => `<div class="side-item" data-s="${s.id}" title="${esc(s.title)}"><span class="ico">${ICONS[s.icon] || ''}</span><span class="lbl">${esc(s.title)}</span>${s.id !== 'home' ? '<span class="chev"></span>' : ''}</div>`).join('');
 
+  /* Drawer behaviour follows the reference navigator:
+     - module with several processes: "Shortcuts" (the user's starred tasks of that module) + "Browse all" process list,
+       and the chosen process's tasks open in a second panel;
+     - module with a single process: its tasks open directly in the first panel (no process list);
+     - while a drawer is open the page behind it is dimmed; clicking the dimmed area closes it. */
   let openSide = null;
-  function closeDrawers() { d1.classList.remove('open'); d2.classList.remove('open'); openSide = null; nav.querySelectorAll('.side-item').forEach((x) => x.classList.remove('active')); }
+  const overlay = document.getElementById('navOverlay');
+  function closeDrawers() { d1.classList.remove('open'); d2.classList.remove('open'); shell.classList.remove('drawer-open'); openSide = null; nav.querySelectorAll('.side-item').forEach((x) => x.classList.remove('active')); }
   function markActive(id) { nav.querySelectorAll('.side-item').forEach((x) => x.classList.toggle('active', x.dataset.s === id)); }
+  function openD1() { d1.classList.add('open'); shell.classList.add('drawer-open'); }
+  overlay.onclick = closeDrawers;
 
+  const TASK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9.5h16M4 14h16M9.5 9.5V19M14.5 9.5V19"/></svg>';
   function taskRow(t) {
     const on = favs.has(t.key);
-    return `<div class="t-item" data-k="${esc(t.key)}"><span class="tico">&#9638;</span><span class="t">${esc(t.title)}</span><button class="star ${on ? 'on' : ''}" title="Add to favorites" data-star="${esc(t.key)}">&#9733;</button></div>`;
+    return `<div class="t-item" data-k="${esc(t.key)}"><span class="tico">${TASK_ICON}</span><span class="t">${esc(t.title)}</span><button class="star ${on ? 'on' : ''}" title="${on ? 'Remove from' : 'Add to'} favorites" data-star="${esc(t.key)}">&#9733;</button></div>`;
+  }
+  function tasksHTML(m, p) {
+    return p.tasks.map((t) => (!t.view ? `<div class="t-group">${esc(t.title)}</div>` : taskRow(TASKS.find((x) => x.key === m.id + '/' + p.id + '/' + t.view)))).join('');
   }
   function bindTaskRows(el) {
     el.querySelectorAll('.t-item').forEach((r) => r.onclick = (e) => {
-      if (e.target.dataset.star) { const k = e.target.dataset.star; favs.has(k) ? favs.delete(k) : favs.add(k); saveFavs(); e.target.classList.toggle('on'); if (openSide === 'favorites') showFavorites(); return; }
+      const star = e.target.closest('[data-star]');
+      if (star) {
+        const k = star.dataset.star; favs.has(k) ? favs.delete(k) : favs.add(k); saveFavs();
+        document.querySelectorAll(`[data-star="${CSS.escape(k)}"]`).forEach((s) => s.classList.toggle('on', favs.has(k)));
+        if (openSide === 'favorites') showFavorites();
+        else { const m = MENU.find((x) => x.id === openSide); if (m) renderShortcuts(m); }
+        return;
+      }
       const t = TASKS.find((x) => x.key === r.dataset.k); closeDrawers(); shell.classList.remove('mob-open'); go(t.view, {}, t);
     });
   }
+  function renderShortcuts(m) {
+    const box = d1.querySelector('.shortcuts'); if (!box) return;
+    const list = TASKS.filter((t) => t.module.id === m.id && favs.has(t.key));
+    box.innerHTML = list.length ? `<h3>Shortcuts</h3>${list.map(taskRow).join('')}` : '';
+    box.classList.toggle('has', list.length > 0);
+    bindTaskRows(box);
+  }
   function showProcess(m, p) {
     d1.querySelectorAll('.d-item').forEach((x) => x.classList.toggle('active', x.dataset.p === p.id));
-    let html = `<h3 style="color:var(--text);font-size:14px">${esc(p.title)}</h3>`;
-    p.tasks.forEach((t) => {
-      if (!t.view) html += `<div class="t-group">${esc(t.title)}</div>`;
-      else html += taskRow(TASKS.find((x) => x.key === m.id + '/' + p.id + '/' + t.view));
-    });
-    d2.innerHTML = html; d2.classList.add('open'); bindTaskRows(d2);
+    d2.innerHTML = `<h3 class="ttl">${esc(p.title)}</h3>${tasksHTML(m, p)}`;
+    d2.classList.add('open'); bindTaskRows(d2);
   }
   function showModule(m) {
-    d1.innerHTML = `<h3>${esc(m.title)} &middot; Browse all</h3>` + m.processes.map((p) => `<div class="d-item" data-p="${p.id}"><span class="sq"></span><span class="t">${esc(p.title)}</span><span>&#8250;</span></div>`).join('');
-    d1.classList.add('open'); d2.classList.remove('open');
+    d2.classList.remove('open');
+    if (m.processes.length === 1) {
+      const p = m.processes[0];
+      d1.innerHTML = `<div class="shortcuts"></div><h3 class="ttl">${esc(p.title)}</h3>${tasksHTML(m, p)}`;
+      openD1(); bindTaskRows(d1); renderShortcuts(m); return;
+    }
+    d1.innerHTML = `<div class="shortcuts"></div><h3>Browse all</h3>` + m.processes.map((p) => `<div class="d-item" data-p="${p.id}"><span class="sq"></span><span class="t">${esc(p.title)}</span><span class="arr">&#8250;</span></div>`).join('');
+    openD1(); renderShortcuts(m);
     d1.querySelectorAll('.d-item').forEach((x) => x.onclick = () => showProcess(m, m.processes.find((p) => p.id === x.dataset.p)));
   }
   function showSearch() {
     d1.innerHTML = `<h3>Search all tasks</h3><input class="search-box" placeholder="Type to search…" id="srch"><div id="srchRes"></div>`;
-    d1.classList.add('open'); d2.classList.remove('open');
+    openD1(); d2.classList.remove('open');
     const inp = d1.querySelector('#srch'); const res = d1.querySelector('#srchRes');
     const run = () => {
       const q = inp.value.trim().toLowerCase();
@@ -115,7 +144,7 @@
   function showFavorites() {
     const list = TASKS.filter((t) => favs.has(t.key));
     d1.innerHTML = '<h3>Favorites</h3>' + (list.length ? list.map(taskRow).join('') : '<div class="empty">No favorites yet. Click the ★ next to any task to add it here.</div>');
-    d1.classList.add('open'); d2.classList.remove('open'); bindTaskRows(d1);
+    openD1(); d2.classList.remove('open'); bindTaskRows(d1);
   }
   nav.querySelectorAll('.side-item').forEach((el) => el.onclick = () => {
     const id = el.dataset.s;
