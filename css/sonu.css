@@ -54,7 +54,7 @@ button { font-family: inherit; }
    product logo above a white "Connect" card. Always light, like the reference. */
 .login-page {
   position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 120px 16px 48px;
-  background: #dbe7f3 url("../assets/login-bg.svg") center / cover no-repeat; color: #1f2a30;
+  background: #dbe7f3 url("../assets/login-bg.svg?v=4") center / cover no-repeat; color: #1f2a30;
 }
 .login-org { position: absolute; top: 18px; left: 22px; display: flex; align-items: center; gap: 10px; }
 .login-org svg { width: 46px; height: 46px; }

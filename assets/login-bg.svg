@@ -1,67 +1,146 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
-  <!-- Original illustration for SONU: sky, two lattice towers, a triangulated canopy and a glass pavilion -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <!-- SONU sign-in backdrop (original artwork): a modern waterfront campus at golden hour.
+       Left: sweeping white ribbon facade with louvres. Back: glass towers incl. a twisted tower,
+       hazy far skyline. Front: reflecting pool. Sky: warm sun glow, drifting clouds, birds. -->
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#b9cfe6"/>
-      <stop offset=".55" stop-color="#dbe7f3"/>
-      <stop offset="1" stop-color="#f3f6fa"/>
+      <stop offset="0" stop-color="#7fa6cf"/>
+      <stop offset=".38" stop-color="#bcd2e7"/>
+      <stop offset=".62" stop-color="#ecdcca"/>
+      <stop offset=".76" stop-color="#f7d9b6"/>
+      <stop offset="1" stop-color="#f6e7d6"/>
     </linearGradient>
-    <linearGradient id="towerA" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#f7f9fb"/>
-      <stop offset=".55" stop-color="#e6ebf1"/>
-      <stop offset="1" stop-color="#c9d3de"/>
+    <radialGradient id="sun" cx="1260" cy="690" r="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff6e6" stop-opacity="1"/>
+      <stop offset=".18" stop-color="#ffe2b3" stop-opacity=".85"/>
+      <stop offset=".5" stop-color="#ffd7a1" stop-opacity=".25"/>
+      <stop offset="1" stop-color="#ffd7a1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a9b9cc"/><stop offset="1" stop-color="#d8d4d0"/>
     </linearGradient>
-    <linearGradient id="towerB" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#eef2f6"/>
-      <stop offset="1" stop-color="#cfd8e2"/>
+    <linearGradient id="glassL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6f8fae"/><stop offset=".55" stop-color="#9cb6cf"/><stop offset="1" stop-color="#e9d6bf"/>
     </linearGradient>
-    <linearGradient id="canopy" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#eef1f5"/>
-      <stop offset="1" stop-color="#d7dee6"/>
+    <linearGradient id="glassR" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f3dcc0"/><stop offset=".5" stop-color="#a8bfd5"/><stop offset="1" stop-color="#7d99b6"/>
     </linearGradient>
-    <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
-      <stop offset="1" stop-color="#fff" stop-opacity=".75"/>
+    <linearGradient id="towerShade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/>
     </linearGradient>
-    <pattern id="diamond" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
-      <path d="M0 0H26M0 0V26" stroke="#b7c3d0" stroke-width="1.2" fill="none"/>
+    <pattern id="win" width="12" height="16" patternUnits="userSpaceOnUse">
+      <path d="M0 0H12M0 0V16" stroke="#ffffff" stroke-opacity=".38" stroke-width="1"/>
     </pattern>
-    <pattern id="tri" width="120" height="104" patternUnits="userSpaceOnUse" patternTransform="rotate(-14)">
-      <path d="M0 104 L60 0 L120 104 M0 0 H120 M0 104 H120 M30 52 H90" stroke="#9aa7b5" stroke-width="2" fill="none"/>
-      <path d="M60 0 L30 52 L90 52 Z" fill="#c7d0da" opacity=".35"/>
+    <pattern id="winWide" width="22" height="14" patternUnits="userSpaceOnUse">
+      <path d="M0 0H22" stroke="#ffffff" stroke-opacity=".45" stroke-width="1.4"/>
+      <path d="M0 0V14" stroke="#ffffff" stroke-opacity=".18" stroke-width="1"/>
     </pattern>
-    <pattern id="glass" width="40" height="34" patternUnits="userSpaceOnUse">
-      <rect width="40" height="34" fill="#dfe7ef"/>
-      <path d="M0 0H40M0 0V34" stroke="#9fb0c1" stroke-width="2"/>
-      <rect x="3" y="4" width="34" height="26" fill="#c8d6e4" opacity=".7"/>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9eef3"/><stop offset=".6" stop-color="#ffffff"/><stop offset="1" stop-color="#f3e6d6"/>
+    </linearGradient>
+    <linearGradient id="ribbonBack" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c9d4df"/><stop offset="1" stop-color="#e7e2dc"/>
+    </linearGradient>
+    <pattern id="fins" width="18" height="40" patternUnits="userSpaceOnUse" patternTransform="skewX(-8)">
+      <rect width="18" height="40" fill="none"/>
+      <rect x="0" width="5" height="40" fill="#b9c6d3" opacity=".55"/>
+      <rect x="5" width="2" height="40" fill="#ffffff" opacity=".9"/>
     </pattern>
+    <linearGradient id="pool" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9dfe3"/><stop offset=".35" stop-color="#c3d2df"/><stop offset="1" stop-color="#a9bfd3"/>
+    </linearGradient>
+    <linearGradient id="refFade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="refMask"><rect x="0" y="850" width="1920" height="230" fill="url(#refFade)"/></mask>
+    <pattern id="ripple" width="160" height="10" patternUnits="userSpaceOnUse">
+      <path d="M0 5 Q40 2 80 5 T160 5" stroke="#ffffff" stroke-opacity=".35" stroke-width="1.2" fill="none"/>
+    </pattern>
+    <filter id="soft" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="blurRef"><feGaussianBlur stdDeviation="2.5"/></filter>
+
+    <g id="towers">
+      <!-- left of sun (shaded side) -->
+      <path d="M760 850 V470 L790 450 L820 470 V850 Z" fill="url(#glassL)"/>
+      <path d="M760 850 V470 L790 450 L820 470 V850 Z" fill="url(#win)"/>
+      <path d="M845 850 V380 H930 V850 Z" fill="url(#glassL)"/>
+      <path d="M845 850 V380 H930 V850 Z" fill="url(#winWide)"/>
+      <path d="M887 380 V300" stroke="#8aa3bb" stroke-width="3"/>
+      <path d="M955 850 V300 Q995 250 1035 300 V850 Z" fill="url(#glassL)"/>
+      <path d="M955 850 V300 Q995 250 1035 300 V850 Z" fill="url(#win)"/>
+      <!-- twisted tower -->
+      <path d="M1065 850 C1060 700 1095 560 1080 420 C1072 340 1100 270 1125 240 C1150 270 1170 340 1162 420 C1150 560 1185 700 1180 850 Z" fill="url(#glassR)"/>
+      <path d="M1065 850 C1060 700 1095 560 1080 420 C1072 340 1100 270 1125 240 C1150 270 1170 340 1162 420 C1150 560 1185 700 1180 850 Z" fill="url(#winWide)" opacity=".9"/>
+      <path d="M1125 240 V170" stroke="#9fb4c8" stroke-width="3"/>
+      <!-- right of sun (lit side) -->
+      <path d="M1330 850 V430 H1420 V850 Z" fill="url(#glassR)"/>
+      <path d="M1330 850 V430 H1420 V850 Z" fill="url(#win)"/>
+      <path d="M1440 850 V340 L1490 300 L1540 340 V850 Z" fill="url(#glassR)"/>
+      <path d="M1440 850 V340 L1490 300 L1540 340 V850 Z" fill="url(#winWide)"/>
+      <path d="M1560 850 V500 H1650 V850 Z" fill="url(#glassR)"/>
+      <path d="M1560 850 V500 H1650 V850 Z" fill="url(#win)"/>
+      <path d="M1675 850 V410 Q1715 380 1755 410 V850 Z" fill="url(#glassR)"/>
+      <path d="M1675 850 V410 Q1715 380 1755 410 V850 Z" fill="url(#winWide)"/>
+      <path d="M1780 850 V540 H1860 V850 Z" fill="url(#glassR)"/>
+      <path d="M1780 850 V540 H1860 V850 Z" fill="url(#win)"/>
+    </g>
   </defs>
 
-  <rect width="1600" height="900" fill="url(#sky)"/>
+  <!-- sky + sun -->
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <rect width="1920" height="1080" fill="url(#sun)"/>
 
-  <!-- triangulated canopy sweeping in from the top right -->
-  <path d="M760 0 H1600 V560 C1460 470 1290 360 1130 250 C990 155 860 70 760 0 Z" fill="url(#canopy)"/>
-  <path d="M760 0 H1600 V560 C1460 470 1290 360 1130 250 C990 155 860 70 760 0 Z" fill="url(#tri)"/>
-  <path d="M760 0 C860 70 990 155 1130 250 C1290 360 1460 470 1600 560" fill="none" stroke="#f8fafc" stroke-width="10"/>
+  <!-- clouds -->
+  <g filter="url(#soft)" fill="#ffffff">
+    <g opacity=".55"><ellipse cx="520" cy="190" rx="260" ry="34"/><ellipse cx="640" cy="170" rx="160" ry="28"/></g>
+    <g opacity=".45"><ellipse cx="1500" cy="140" rx="300" ry="30"/><ellipse cx="1660" cy="160" rx="180" ry="24"/></g>
+    <g opacity=".35"><ellipse cx="1080" cy="300" rx="220" ry="20"/></g>
+  </g>
 
-  <!-- tall lattice tower (left) -->
-  <path d="M230 900 C250 640 285 330 318 40 L338 30 C350 300 372 620 420 900 Z" fill="url(#towerA)"/>
-  <path d="M230 900 C250 640 285 330 318 40 L338 30 C350 300 372 620 420 900 Z" fill="url(#diamond)" opacity=".8"/>
-  <path d="M318 40 C300 330 265 640 246 900" stroke="#ffffff" stroke-width="6" fill="none"/>
+  <!-- birds -->
+  <g fill="none" stroke="#5b6b7c" stroke-width="2.2" stroke-linecap="round" opacity=".7">
+    <path d="M1390 250 q8 -7 16 0 q8 -7 16 0"/>
+    <path d="M1430 272 q6 -5 12 0 q6 -5 12 0"/>
+    <path d="M1362 282 q5 -4 10 0 q5 -4 10 0"/>
+  </g>
 
-  <!-- second tower -->
-  <path d="M470 900 C495 690 525 430 548 120 L566 112 C580 380 610 650 668 900 Z" fill="url(#towerB)"/>
-  <path d="M470 900 C495 690 525 430 548 120 L566 112 C580 380 610 650 668 900 Z" fill="url(#diamond)" opacity=".7"/>
-  <path d="M548 120 C530 430 500 690 484 900" stroke="#ffffff" stroke-width="5" fill="none"/>
+  <!-- far hazy skyline -->
+  <g fill="url(#far)" opacity=".75">
+    <path d="M600 850 V700 H640 V660 H690 V720 H720 V640 L740 620 L760 640 V850 Z"/>
+    <path d="M1180 850 V690 H1220 V650 H1260 V700 H1300 V850 Z"/>
+    <path d="M1200 850 V600 H1230 V560 L1245 520 L1260 560 V600 H1290 V850 Z"/>
+    <path d="M1650 850 V660 H1700 V620 H1740 V850 Z"/>
+    <path d="M1860 850 V640 H1920 V850 Z"/>
+    <rect x="560" y="740" width="1360" height="110"/>
+  </g>
 
-  <!-- curved shell in the lower left -->
-  <path d="M0 520 C120 600 190 720 220 900 H0 Z" fill="#e4e9ef"/>
-  <path d="M0 520 C120 600 190 720 220 900" stroke="#ffffff" stroke-width="8" fill="none"/>
+  <!-- towers and their reflection -->
+  <use href="#towers"/>
+  <rect x="0" y="846" width="1920" height="10" fill="#f4ede5"/>
+  <rect x="0" y="856" width="1920" height="224" fill="url(#pool)"/>
+  <g mask="url(#refMask)" filter="url(#blurRef)" opacity=".8">
+    <use href="#towers" transform="translate(0 1712) scale(1 -1)"/>
+  </g>
+  <rect x="0" y="856" width="1920" height="224" fill="url(#ripple)"/>
+  <!-- sun glint on the water -->
+  <ellipse cx="1260" cy="900" rx="260" ry="10" fill="#fff4e0" opacity=".7" filter="url(#soft)"/>
 
-  <!-- glass pavilion along the bottom right -->
-  <path d="M760 900 V720 C980 690 1300 640 1600 600 V900 Z" fill="url(#glass)"/>
-  <path d="M760 720 C980 690 1300 640 1600 600" stroke="#ffffff" stroke-width="14" fill="none"/>
-  <path d="M760 760 C980 732 1300 684 1600 646" stroke="#f1f4f7" stroke-width="5" fill="none"/>
+  <!-- foreground: sweeping ribbon facade on the left -->
+  <path d="M0 230 C230 250 420 420 520 640 C575 760 600 900 606 1080 H0 Z" fill="url(#ribbonBack)"/>
+  <path d="M0 140 C190 150 360 300 450 520 C505 660 530 860 532 1080 H0 Z" fill="url(#ribbon)"/>
+  <path d="M0 140 C190 150 360 300 450 520 C505 660 530 860 532 1080 H0 Z" fill="url(#fins)"/>
+  <path d="M0 140 C190 150 360 300 450 520 C505 660 530 860 532 1080" fill="none" stroke="#ffffff" stroke-width="12"/>
+  <path d="M0 230 C230 250 420 420 520 640 C575 760 600 900 606 1080" fill="none" stroke="#fdf6ee" stroke-width="5" opacity=".8"/>
+  <!-- warm light grazing the ribbon -->
+  <path d="M0 140 C190 150 360 300 450 520 C505 660 530 860 532 1080 H380 C360 820 330 600 260 430 C200 290 110 200 0 180 Z" fill="#ffd9a8" opacity=".18"/>
 
-  <rect y="600" width="1600" height="300" fill="url(#haze)"/>
+  <!-- low pavilion + palms along the promenade (right) -->
+  <path d="M1500 850 C1600 812 1760 800 1920 806 V850 Z" fill="#f7f1ea"/>
+  <path d="M1500 850 C1600 812 1760 800 1920 806" stroke="#ffffff" stroke-width="6" fill="none"/>
+  <g fill="#6d7b6a" opacity=".55">
+    <path d="M1600 850 q-3 -60 4 -96 l3 0 q-2 40 1 96 z"/>
+    <path d="M1607 756 q-30 -6 -48 8 q22 -18 48 -12 q-18 -20 -42 -20 q30 -4 46 18 q6 -26 28 -36 q-18 18 -20 40 q26 -14 50 -6 q-30 0 -48 14 q34 2 46 22 q-22 -16 -44 -14 z"/>
+    <path d="M1700 850 q-3 -48 4 -78 l3 0 q-2 32 1 78 z"/>
+    <path d="M1706 774 q-26 -5 -40 7 q18 -15 40 -10 q-15 -17 -35 -17 q25 -3 38 15 q5 -22 23 -30 q-15 15 -17 33 q22 -12 42 -5 q-25 0 -40 12 q28 2 38 18 q-18 -13 -37 -12 z"/>
+  </g>
 </svg>
