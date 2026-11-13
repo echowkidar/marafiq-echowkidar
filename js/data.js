@@ -23,6 +23,7 @@
     const ago = (days) => cap(SOD - days * DAY + ri(8, 17) * 3600e3 + ri(0, 59) * 60e3);
     const rdays = () => { const r = rnd(); return r < 0.14 ? ri(0, N.getDay()) : r < 0.42 ? ri(0, N.getDate() - 1) : ri(0, 420); };
     const ym = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + pad(d.getMonth() + 1, 2); };
+    const eod = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() + 17 * 3600e3; };
     const D = {};
 
     /* ---- people ---- */
@@ -32,6 +33,9 @@
     const staff = [{ name: 'Ravi Menon', username: 'contractor' }, { name: 'Nadia Farouk', username: 'supervisor' }, { name: 'Omar Haddad', username: 'admin' }];
     for (let i = 0; i < 13; i++) { let n; do { n = nm(); } while (staff.some((s) => s.name === n)); staff.push({ name: n, username: n.toLowerCase().replace(/[^a-z]/g, '.').replace(/\.+/g, '.') }); }
     const person = () => pick(staff);
+    const others = staff.slice(3);
+    const nameOf = (u) => { const s = staff.find((x) => x.username === u); return s ? s.name : u; };
+    const anyUser = () => (chance(0.6) ? pick(['supervisor', 'admin', 'contractor']) : pick(others).username);
     D.users = [
       { id: 1, username: 'contractor', password: 'Sonu@123', name: 'Ravi Menon', position: 'Civil Technician', company: 'SONU Contracting Services', phone: '+974 5550 1101', email: 'ravi.menon@example.com', role: 'Contractor', bl_id: 'SNHQB02' },
       { id: 2, username: 'supervisor', password: 'Sonu@123', name: 'Nadia Farouk', position: 'Facilities Supervisor', company: 'SONU Facilities Management', phone: '+974 5550 1102', email: 'nadia.farouk@example.com', role: 'Supervisor', bl_id: 'SNHQB01' },
@@ -40,7 +44,7 @@
 
     /* ---- sites & buildings ---- */
     const SITES = [['SNHQ', 'SONU Headquarters Campus', 'Doha', 25.2854, 51.5310], ['SNAC', 'SONU Academic City', 'Al Rayyan', 25.3300, 51.4300], ['SNMD', 'SONU Medical District', 'Doha', 25.3000, 51.4900], ['SNSP', 'SONU Sports Complex', 'Lusail', 25.4200, 51.4900], ['SNRS', 'SONU Research Park', 'Al Rayyan', 25.3100, 51.3800], ['SNLB', 'SONU Lusail Business Park', 'Lusail', 25.4500, 51.5000], ['SNWK', 'SONU Al Wakrah Campus', 'Al Wakrah', 25.1750, 51.5990], ['SNKH', 'SONU Al Khor Campus', 'Al Khor', 25.6800, 51.5000]];
-    D.sites = SITES.map((s) => ({ id: s[0], name: s[1], city: s[2], lat: s[3], lng: s[4] }));
+    D.sites = SITES.map((s) => ({ id: s[0], name: s[1], city: s[2], lat: s[3], lng: s[4], status: s[0] === 'SNKH' ? 'In-Active' : 'Active' }));
     const BL = { SNHQ: ['Administration Tower', 'Engineering Block A', 'Engineering Block B', 'Central Library', 'Student Services Centre'], SNAC: ['Science Block A', 'Science Block B', 'Arts Building', 'Lecture Hall Complex'], SNMD: ['Health Sciences Building', 'Clinical Skills Centre', 'Pharmacy Block', 'Wellness Clinic'], SNSP: ['Sports Hall', 'Aquatic Centre', 'Fitness Pavilion', 'Stadium Pavilion'], SNRS: ['Innovation Lab', 'Materials Research Lab', 'Data Centre', 'Pilot Plant'], SNLB: ['Business Tower One', 'Conference Centre', 'Executive Suites'], SNWK: ['Residence Hall A', 'Residence Hall B', 'Community Centre', 'Dining Hall'], SNKH: ['Marine Studies Block', 'Visitor Centre', 'Maintenance Depot'] };
     D.buildings = []; D.floors = [];
     D.sites.forEach((s) => BL[s.id].forEach((n, i) => {
@@ -51,6 +55,16 @@
     const siteOf = {}; D.sites.forEach((s) => (siteOf[s.id] = s));
     const bOf = {}; D.buildings.forEach((b) => (bOf[b.id] = b));
     const bldIds = D.buildings.map((b) => b.id);
+
+    /* ---- divisions, departments, projects ---- */
+    D.divisions = [['DV-001', 'Facilities Operations'], ['DV-002', 'Health, Safety and Environment'], ['DV-003', 'Engineering Services'], ['DV-004', 'Campus Services'], ['DV-005', 'Administration and Finance']].map((d) => ({ id: d[0], name: d[1] }));
+    D.departments = [['Mechanical Maintenance', 'DV-001'], ['Electrical Maintenance', 'DV-001'], ['HVAC Operations', 'DV-001'], ['Fire and Life Safety', 'DV-002'], ['Environmental Compliance', 'DV-002'], ['Projects and Capital Works', 'DV-003'], ['Civil and Structural', 'DV-003'], ['Grounds and Cleaning', 'DV-004'], ['Transport and Logistics', 'DV-004'], ['Procurement and Contracts', 'DV-005']].map((d, i) => ({ id: 'DP-' + pad(i + 1, 3), name: d[0], dv_id: d[1] }));
+    const activeSites = D.sites.filter((s) => s.status === 'Active');
+    const PNAMES = ['Chiller Plant Upgrade', 'Roof Waterproofing Programme', 'Fire Alarm Replacement', 'Lift Modernisation', 'Facade Cleaning Contract', 'Generator Overhaul', 'Car Park Resurfacing', 'LED Lighting Retrofit', 'Water Network Refurbishment', 'BMS Integration', 'Landscape Renewal', 'Data Hall Cooling Works'];
+    D.projects = PNAMES.map((n, i) => {
+      const s = activeSites[i % activeSites.length]; const bl = D.buildings.filter((b) => b.site_id === s.id);
+      return { id: 'PRJ-' + (1001 + i), name: n, engineer: (i === 4 || i === 9) ? null : person().name, site_id: s.id, bl_id: bl[i % bl.length].id, status: 'Active' };
+    });
 
     /* ---- trades, teams, craftspersons ---- */
     D.trades = [['MECHE', 'Mechanical'], ['CIVI', 'Civil'], ['HVACE', 'HVAC'], ['ELEC', 'Electrical'], ['PLUMB', 'Plumbing'], ['GSER', 'General Services'], ['FIRE', 'Fire Systems'], ['CLEAN', 'Cleaning']].map((t) => ({ id: t[0], name: t[1] }));
@@ -92,12 +106,15 @@
     const FEEDBACK = ['Work completed as per scope', 'Replaced faulty component and tested', 'Area cleaned and handed over', 'Issue resolved; monitoring for 48 hours', 'Adjusted and tested, operating normally'];
     const NONCOMP = { 'On Hold for Parts': 'Awaiting spare parts delivery', 'On Hold for Access': 'Area access not available from occupant', 'On Hold for Labor': 'Specialist technician not available', Stopped: 'Stopped due to safety concern', 'Reviewed but On Hold': 'Awaiting budget confirmation' };
     D.wr = []; const usedWr = new Set();
-    for (let i = 0; i < 350; i++) {
-      const age = rdays(); const dr = ago(age); const b = bOf[pick(bldIds)]; const type = chance(0.3) ? 'PM' : 'On Demand'; const st = wrStatus(age);
+    // o: { age, b (building), status, prob ('PTW-PREP' | 'PTW-DEISO'), ptw (permit row) }
+    const mkWr = (o) => {
+      o = o || {};
+      const age = o.age != null ? o.age : rdays(); const dr = ago(age); const b = o.b || bOf[pick(bldIds)]; const type = o.prob ? 'On Demand' : (chance(0.3) ? 'PM' : 'On Demand'); const st = o.status || wrStatus(age);
       const eqs = eqByBl[b.id] || []; let eq = (type === 'PM' || chance(0.7)) && eqs.length ? pick(eqs) : null;
       if (type === 'PM' && !eq) eq = pick(D.equipment);
+      if (o.prob) eq = null;
       const bb = eq && type === 'PM' ? bOf[eq.bl_id] : b;
-      const trade = eq ? eq.trade : pick(tradeIds); const fr = pick(FREQ);
+      const trade = o.prob ? 'ELEC' : eq ? eq.trade : pick(tradeIds); const fr = pick(FREQ);
       let id; do { id = 3374175 + ri(-2000, 6000); } while (usedWr.has(id)); usedWr.add(id);
       const person0 = chance(0.3) ? staff[0] : person();
       const past = !['Requested', 'Reviewed but On Hold', 'Rejected', 'Cancelled'].includes(st);
@@ -108,95 +125,156 @@
       const perform = past ? dr + ri(1, 5) * DAY : null;
       const ccd = done ? Math.min(NOW - 3600e3, Math.max(dr + DAY, target + ri(-4, 4) * DAY)) : null;
       const fin = ['Completed', 'Closed'].includes(st) ? Math.min(NOW - 1800e3, ccd + ri(0, 2) * DAY) : null;
-      const estc = ri(15, 600) * 10; const team = pick(D.work_teams.filter((w) => w.trade === trade).concat(D.work_teams));
-      D.wr.push({
+      const estc = chance(0.1) ? 0 : ri(15, 600) * 10; const team = pick(D.work_teams.filter((w) => w.trade === trade).concat(D.work_teams));
+      const desc = o.prob === 'PTW-PREP' ? 'Isolation of ' + pick(['electrical supply', 'chilled water line', 'fire suppression zone', 'water riser']) + ' before permit works'
+        : o.prob === 'PTW-DEISO' ? 'De-isolation and restoration after permit works'
+          : type === 'PM' ? 'PPM ' + fr[0] + ' maintenance - ' + eq.name : pick(PROBS[trade]) + (eq ? ' - ' + eq.name : '');
+      const w = {
         id, action_item_id: 2000000 + ri(10000, 989999), date_requested: I(dr), requestor: person0.name, requestor_username: person0.username,
-        site_id: bb.site_id, bl_id: bb.id, bl_name: bb.name, fl_id: pick(['GF', 'L1', 'L2']), prob_type: trade,
-        description: type === 'PM' ? 'PPM ' + fr[0] + ' maintenance - ' + eq.name : pick(PROBS[trade]) + (eq ? ' - ' + eq.name : ''),
+        site_id: bb.site_id, bl_id: bb.id, bl_name: bb.name, fl_id: pick(['GF', 'L1', 'L2']), prob_type: o.prob || trade,
+        description: desc,
         priority: prio, status: st, wr_type: type, pm_procedure: type === 'PM' ? trade + '-PM-' + fr[0].charAt(0) + pad(ri(1, 12), 2) : '',
         date_review_confirmed: I(rev), date_assigned: ['Assigned to Work Order', 'Issued and In Process'].includes(st) || done || WR_ACTIVE.includes(st) ? I(Math.min(NOW - 3600e3, (rev || dr) + DAY)) : null,
         date_to_perform: I(perform), date_agreed_target: I(target), date_contractor_completed: I(ccd), date_completed: I(fin),
         work_team: team.id, cause_type: done ? pick(CAUSE) : '', repair_type: done ? pick(REPAIR) : '', account_code: 'AC-' + ri(1000, 1999),
         eq_id: eq ? eq.id : '', eq_name: eq ? eq.name : '', eq_std: eq ? eq.eq_std : '', criticality: eq ? eq.criticality : '',
-        request_nature: type === 'PM' ? 'Preventive' : pick(['Breakdown', 'Defect', 'Service Request', 'Inspection Finding', 'Emergency']),
-        ptw_id: '', ptw_status: '', est_cost: estc, act_cost: done ? Math.round(estc * (0.8 + rnd() * 0.4)) : 0, est_hours: ri(1, 40), act_hours: done ? ri(1, 44) : (WR_ACTIVE.includes(st) ? ri(0, 12) : 0),
-        has_rfe: false, completion_feedback: fin ? pick(FEEDBACK) : '', reason_non_completion: NONCOMP[st] || '', assigned_to_me: chance(0.14), substitute: chance(0.05),
+        request_nature: o.prob ? 'Isolation' : type === 'PM' ? 'Preventive' : pick(['Breakdown', 'Defect', 'Service Request', 'Inspection Finding', 'Emergency']),
+        ptw_id: o.ptw ? o.ptw.id : '', ptw_status: o.ptw ? o.ptw.status : '', prep_wr_id: null, est_cost: estc, cost_est_total: estc, act_cost: done ? Math.round(estc * (0.8 + rnd() * 0.4)) : 0, est_hours: ri(1, 40), act_hours: done ? ri(1, 44) : (WR_ACTIVE.includes(st) ? ri(0, 12) : 0),
+        has_rfe: false, completion_feedback: fin ? pick(FEEDBACK) : '', reason_non_completion: NONCOMP[st] || '', step_type: null, assigned_to_me: false, substitute: chance(0.05),
         craftsperson: past ? pick(D.craftspersons.filter((c) => c.trade === trade).concat(D.craftspersons)).name : ''
-      });
-    }
-    const wrById = {}; D.wr.forEach((w) => (wrById[w.id] = w));
+      };
+      D.wr.push(w); return w;
+    };
+    for (let i = 0; i < 350; i++) mkWr({});
 
     /* ---- permits to work ---- */
     const ZONES = ['Zone A', 'Zone B', 'Zone C', 'Zone D'];
     const WORKTYPES = ['Hot Work', 'Cold Work', 'Work at Height', 'Confined Space', 'Electrical Isolation', 'Excavation'];
     const REJ = ['Risk assessment incomplete', 'Isolation not confirmed', 'Contractor documents expired', 'Work area conflict', 'Incorrect work type selected'];
+    const COMPANIES = ['Gulf Facility Services', 'Al Noor Technical Works', 'Pearl Engineering Co.', 'Desert Rose Contracting'];
     const ptwStatus = (age) => {
-      if (age <= 1) return wp([['Requested', 4], ['Authorized', 3], ['Issued', 2]]);
-      if (age <= 10) return wp([['Requested', 1], ['Authorized', 2], ['Issued', 5], ['Re Issued', 2], ['Waiting For Re Issuing', 1], ['Completed By Applicant', 1], ['Rejected', 1], ['Stopped by Authority', 1]]);
-      return wp([['Closed', 10], ['Completed By Controller', 3], ['Completed By Applicant', 2], ['Rejected', 2], ['Stopped by Authority', 1], ['Issued', 1], ['Re Issued', 0.7], ['Waiting For Re Issuing', 0.3]]);
+      if (age <= 1) return wp([['Requested', 4], ['Applied', 3], ['Authorized', 2], ['Issued', 1]]);
+      if (age <= 10) return wp([['Requested', 1], ['Applied', 1], ['Authorized', 2], ['Issued', 5], ['Re Issued', 2], ['Waiting For Re Issuing', 1], ['Completed By Applicant', 1], ['Rejected', 1]]);
+      return wp([['Closed', 10], ['Completed By Controller', 3], ['Completed By Applicant', 2], ['Rejected', 2], ['Issued', 1.2], ['Re Issued', 0.8], ['Waiting For Re Issuing', 0.3]]);
     };
-    D.ptw = []; const usedP = new Set(); let pSeq = 0;
-    const PTW_ACTIVE = ['Authorized', 'Issued', 'Re Issued', 'Waiting For Re Issuing'];
-    function makePtw(wr) {
-      const created = wr ? Math.min(NOW - 3600e3, Date.parse(wr.date_requested) + ri(1, 3) * DAY) : ago(rdays());
-      const age = Math.floor((NOW - created) / DAY); const st = ptwStatus(age);
-      const b = wr ? bOf[wr.bl_id] : bOf[pick(bldIds)];
-      const ap = chance(0.35) ? staff[0] : person();
-      let pid; do { pid = pick(['C-', 'C-', 'C-', 'C-', 'C-', 'C-', 'W-', 'E-']) + ri(100000, 999999); } while (usedP.has(pid)); usedP.add(pid);
+    const PATH = {
+      Requested: ['Requested'], Applied: ['Requested', 'Applied'], Authorized: ['Requested', 'Applied', 'Authorized'], Rejected: ['Requested', 'Rejected'],
+      Issued: ['Requested', 'Applied', 'Authorized', 'Issued'], 'Waiting For Re Issuing': ['Requested', 'Applied', 'Authorized', 'Issued', 'Waiting For Re Issuing'],
+      'Re Issued': ['Requested', 'Applied', 'Authorized', 'Issued', 'Waiting For Re Issuing', 'Re Issued'], 'Completed By Applicant': ['Requested', 'Applied', 'Authorized', 'Issued', 'Completed By Applicant'],
+      'Completed By Controller': ['Requested', 'Applied', 'Authorized', 'Issued', 'Completed By Applicant', 'Completed By Controller'], Closed: ['Requested', 'Applied', 'Authorized', 'Issued', 'Completed By Applicant', 'Completed By Controller', 'Closed']
+    };
+    const ACT = { Requested: 'Permit requested', Applied: 'Permit applied', Authorized: 'Permit authorized', Issued: 'Permit issued', Rejected: 'Permit rejected', 'Waiting For Re Issuing': 'Re-issue requested', 'Re Issued': 'Permit re-issued', 'Completed By Applicant': 'Work completed by applicant', 'Completed By Controller': 'Completion confirmed by controller', Closed: 'Permit closed' };
+    D.ptw = []; const usedP = new Set();
+    // force: { status, ap, start, created, upto, ended }
+    function makePtw(wrs, force) {
+      force = force || {};
+      const b = wrs.length ? bOf[wrs[0].bl_id] : bOf[pick(bldIds)];
+      const created = force.created != null ? force.created : wrs.length ? Math.min(NOW - 3600e3, Math.min.apply(null, wrs.map((w) => Date.parse(w.date_requested))) + ri(1, 3) * DAY) : ago(rdays());
+      const age = Math.floor((NOW - created) / DAY); const st = force.status || ptwStatus(age);
+      const ap = force.ap || (chance(0.35) ? staff[0] : person());
+      let pid; do { pid = 'C-' + ri(700000, 831500); } while (usedP.has(pid)); usedP.add(pid);
       const proc = ri(1, 5);
-      const issued = ['Requested', 'Authorized', 'Rejected'].includes(st) ? null : Math.min(NOW - 1800e3, created + proc * DAY);
-      const start = issued || created + DAY; let end = start + ri(1, 10) * DAY;
-      if (PTW_ACTIVE.includes(st)) { const r = rnd(); if (r < 0.12) end = NOW + ri(2, 40) * 3600e3; else if (r < 0.28) end = NOW + ri(3, 20) * DAY; }
-      const closedSt = ['Closed', 'Completed By Controller', 'Completed By Applicant'].includes(st);
-      const closed = ['Closed', 'Completed By Controller'].includes(st) ? Math.min(NOW - 1800e3, Math.max(start + 3600e3, end + (chance(0.4) ? ri(1, 3) * DAY : -ri(0, 2) * DAY))) : null;
-      const hist = [{ date: I(created), action: 'Permit requested', by: ap.name }];
-      if (st !== 'Requested') hist.push({ date: I(created + 3600e3 * ri(2, 20)), action: st === 'Rejected' ? 'Permit rejected' : 'Permit authorized', by: 'Nadia Farouk' });
-      if (issued) hist.push({ date: I(issued), action: 'Permit issued', by: 'Nadia Farouk' });
-      if (['Re Issued', 'Waiting For Re Issuing'].includes(st)) hist.push({ date: I(Math.min(NOW - 1800e3, start + DAY)), action: 'Permit re-issued', by: 'Nadia Farouk' });
-      if (closedSt) hist.push({ date: I(closed || Math.min(NOW - 1800e3, end)), action: st === 'Completed By Applicant' ? 'Work completed by applicant' : 'Permit closed', by: ap.name });
-      if (st === 'Stopped by Authority') hist.push({ date: I(Math.min(NOW - 1800e3, start + DAY)), action: 'Stopped by authority', by: 'Omar Haddad' });
+      const unissued = ['Requested', 'Applied', 'Authorized', 'Rejected'].includes(st);
+      const issued = unissued ? null : force.start != null ? Math.min(NOW - 1800e3, force.start) : Math.min(NOW - 1800e3, created + proc * DAY);
+      const start = force.start != null ? force.start : (issued || created + DAY);
+      let upto = eod(start + ri(1, 10) * DAY);
+      if (['Issued', 'Re Issued', 'Waiting For Re Issuing'].includes(st) && chance(0.35)) upto = SOD + ri(3, 25) * DAY + 17 * 3600e3;
+      if (force.upto != null) upto = force.upto;
+      const pastDay = new Date(upto).setHours(0, 0, 0, 0) < SOD;
+      let end = null; let closed = null;
+      if (['Closed', 'Completed By Controller'].includes(st)) { closed = Math.min(NOW - 600e3, Math.max(start + 3600e3, upto + (chance(0.4) ? ri(1, 3) * DAY : -ri(0, 2) * DAY))); end = closed; }
+      else if (st === 'Completed By Applicant') end = Math.min(NOW - 600e3, Math.max(start + 3600e3, upto - ri(0, 2) * DAY));
+      else if (['Issued', 'Re Issued'].includes(st) && pastDay && (force.ended != null ? force.ended : chance(0.08))) end = Math.max(start, Math.min(NOW - 600e3, upto - ri(0, 2) * DAY));
+      const proj = pick(D.projects.filter((p) => p.site_id === b.site_id).concat(D.projects));
+      const dp = pick(D.departments);
+      const ctrl = chance(0.5) ? 'supervisor' : chance(0.5) ? 'contractor' : pick(others).username;
+      const live = ['Authorized', 'Issued', 'Re Issued', 'Waiting For Re Issuing'].includes(st);
+      const path = PATH[st]; const hist = []; let t = created;
+      path.forEach((s, i) => {
+        if (i) t = s === 'Issued' && issued ? issued : Math.min(NOW - 1800e3, t + ri(1, 20) * 3600e3);
+        hist.push({ date: I(t), action: ACT[s], to: s, by: s === 'Requested' || s === 'Waiting For Re Issuing' || s === 'Completed By Applicant' ? ap.name : s === 'Completed By Controller' || s === 'Closed' ? nameOf(ctrl) : 'Nadia Farouk' });
+      });
       const comm = []; for (let c = ri(0, 3); c > 0; c--) comm.push({ date: I(created + c * 4 * 3600e3), from: c % 2 ? ap.name : 'Nadia Farouk', message: pick(['Please confirm isolation before starting.', 'Risk assessment attached.', 'Area has been barricaded.', 'Need extension for tomorrow.', 'Work started as planned.']) });
       const p = {
-        id: pid, wr_id: wr ? wr.id : null, site_id: b.site_id, site_name: siteOf[b.site_id].name, bl_id: b.id, bl_name: b.name, date_created: I(created), date_issued: I(issued), date_start: I(start), date_end: I(end),
-        status: st, work_type: pick(WORKTYPES), zone: pick(ZONES), applicant: ap.name, applicant_username: ap.username, controller_username: chance(0.5) ? 'supervisor' : 'contractor', authority_username: 'admin',
-        requestor_phone: '+974 5550 ' + ri(1000, 9999), project_code: 'PRJ-' + ri(100, 160), work_team: wr ? wr.work_team : pick(D.work_teams).id,
-        description: wr ? wr.description : pick(['Roof access for antenna inspection', 'Cable trench excavation', 'Tank cleaning and inspection', 'Welding of support bracket', 'Facade cleaning at height', 'Panel isolation for upgrade works', 'Chiller room maintenance']),
-        needs_daily_endorsement: PTW_ACTIVE.includes(st) && chance(0.25), ready_for_closure: st === 'Completed By Applicant', stopped: st === 'Stopped by Authority',
-        reject_reason: st === 'Rejected' ? pick(REJ) : '', processing_days: ['Requested', 'Rejected'].includes(st) ? null : proc, date_closed: I(closed), history: hist, communications: comm,
+        id: pid, ptw_code: pid, status: st, project_code: proj.id, site_id: b.site_id, site_name: siteOf[b.site_id].name, bl_id: b.id, bl_name: b.name, fl_id: pick(['GF', 'L1', 'L2']),
+        description: wrs.length ? wrs[0].description : pick(['Roof access for antenna inspection', 'Cable trench excavation', 'Tank cleaning and inspection', 'Welding of support bracket', 'Facade cleaning at height', 'Panel isolation for upgrade works', 'Chiller room maintenance']),
+        dp_id: dp.id, dv_id: dp.dv_id, priority: wp([[1, 45], [2, 10], [3, 30], [4, 15]]),
+        date_created: I(created), date_start: I(start), date_upto: I(upto), date_end: I(end), date_issued: I(issued),
+        work_type: pick(WORKTYPES), zone: pick(ZONES), applicant: ap.name, applicant_username: ap.username, controller_username: ctrl, authority_username: chance(0.7) ? 'admin' : 'supervisor',
+        blfp_username: pick(['supervisor', 'admin', 'supervisor'].concat(others.map((o) => o.username))), tram_username: chance(0.5) ? 'admin' : pick(['supervisor'].concat(others.map((o) => o.username))), created_by: chance(0.8) ? ap.username : anyUser(),
+        daily_endorsement_needed: live && chance(0.25) ? 'Yes' : 'No', blfp_endorsement_pending: live && chance(0.2),
+        contractor: ap.username === 'contractor' ? 'SONU Contracting Services' : pick(COMPANIES), work_team: wrs.length ? wrs[0].work_team : pick(D.work_teams).id,
+        requestor_phone: '+974 5550 ' + ri(1000, 9999), history: hist, communications: comm,
+        reject_reason: st === 'Rejected' ? pick(REJ) : '', processing_days: unissued ? null : proc, date_closed: I(closed),
         hazards: { electrical: chance(0.3), height: chance(0.3), confined: chance(0.1), hot: chance(0.2), chemical: chance(0.1) }
       };
       D.ptw.push(p);
-      if (wr) { wr.ptw_id = p.id; wr.ptw_status = p.status; }
+      wrs.forEach((w) => { w.ptw_id = p.id; w.ptw_status = p.status; });
       return p;
     }
-    D.wr.filter((w) => ['Issued and In Process', 'Completed', 'Closed', 'Contractor Completed', 'On Hold for Parts', 'On Hold for Access', 'Stopped', 'Assigned to Work Order', 'On Hold for Labor'].includes(w.status)).forEach((w) => { if (D.ptw.length < 190 && chance(0.62)) makePtw(w); });
-    while (D.ptw.length < 250) makePtw(null);
-    D.ptw.sort((x, y) => Date.parse(x.date_created) - Date.parse(y.date_created));
-    // guarantee a healthy pool of the demo user's own permits and closure candidates
-    D.ptw.filter((p) => !p.wr_id).slice(0, 18).forEach((p, i) => { if (i < 12) { p.applicant = 'Ravi Menon'; p.applicant_username = 'contractor'; } });
-    const noWr = D.ptw.filter((p) => !p.wr_id && p.applicant_username === 'contractor').slice(0, 5);
-    noWr.forEach((p) => { p.status = 'Completed By Applicant'; p.ready_for_closure = true; p.stopped = false; p.reject_reason = ''; });
-
-    /* ---- ISO / De-ISO ---- */
-    D.iso = [];
-    D.ptw.filter((p) => p.wr_id && !['Requested', 'Rejected'].includes(p.status)).slice(0, 80).forEach((p, i) => {
-      const st = wp([['Requested', 2], ['Isolated', 3], ['De-Isolated', 2], ['Completed', 4]]); const req = Date.parse(p.date_start);
-      D.iso.push({ id: 5000 + i, wr_id: p.wr_id, ptw_id: p.id, system: pick(['Electrical', 'Mechanical', 'Fire', 'Water']), point: pick(['DB-GF-01', 'Valve V-12', 'Isolator ISO-3', 'Pump P-2 breaker', 'Riser R4 valve']), isolation_type: pick(['Lock Out Tag Out', 'Valve Closure', 'Breaker Off']), status: st, requested_by: p.applicant, date_requested: I(Math.min(req, NOW - 3600e3)), date_isolated: st === 'Requested' ? null : I(Math.min(req + 3600e3, NOW - 1800e3)), date_deisolated: ['De-Isolated', 'Completed'].includes(st) ? I(Math.min(req + 2 * DAY, NOW - 600e3)) : null });
+    const PTW_WR_ST = ['Issued and In Process', 'Completed', 'Closed', 'Contractor Completed', 'On Hold for Parts', 'On Hold for Access', 'Stopped', 'Assigned to Work Order', 'On Hold for Labor'];
+    const eligible = D.wr.filter((w) => PTW_WR_ST.includes(w.status)); const byBl = {}; const usedW = new Set();
+    eligible.forEach((w) => (byBl[w.bl_id] = byBl[w.bl_id] || []).push(w));
+    eligible.forEach((w) => {
+      if (usedW.has(w.id) || D.ptw.length >= 190 || !chance(0.62)) return;
+      const group = [w]; usedW.add(w.id);
+      if (chance(0.3)) { const pool = (byBl[w.bl_id] || []).filter((x) => !usedW.has(x.id)); for (let k = ri(1, 2); k > 0 && pool.length; k--) { const x = pool.shift(); group.push(x); usedW.add(x.id); } }
+      makePtw(group);
     });
+    while (D.ptw.length < 225) makePtw([]);
+    // guaranteed colour cases: expiring today / +1 / +2 days (orange), expired without end date (red), expired with end date (blue)
+    for (let k = 0; k < 9; k++) { const up = SOD + (k % 3) * DAY + 17 * 3600e3; makePtw([], { status: k % 2 ? 'Re Issued' : 'Issued', upto: up, start: SOD - ri(2, 6) * DAY + 8 * 3600e3, created: SOD - 8 * DAY, ap: k < 5 ? staff[0] : undefined }); }
+    for (let k = 0; k < 10; k++) { const up = SOD - ri(1, 20) * DAY + 17 * 3600e3; makePtw([], { status: k % 2 ? 'Re Issued' : 'Issued', upto: up, start: up - ri(2, 8) * DAY - 9 * 3600e3, created: up - 12 * DAY, ended: false, ap: k < 5 ? staff[0] : undefined }); }
+    for (let k = 0; k < 6; k++) { const up = SOD - ri(1, 15) * DAY + 17 * 3600e3; makePtw([], { status: k % 2 ? 'Re Issued' : 'Issued', upto: up, start: up - ri(2, 8) * DAY - 9 * 3600e3, created: up - 12 * DAY, ended: true, ap: k < 3 ? staff[0] : undefined }); }
+    for (let k = 0; k < 5; k++) makePtw([], { status: 'Completed By Applicant', ap: staff[0], created: SOD - ri(12, 30) * DAY });
+    D.ptw.sort((x, y) => Date.parse(x.date_created) - Date.parse(y.date_created));
+
+    /* ---- PTW-PREP / PTW-DEISO work requests + ISO / De-ISO requests ---- */
+    D.iso = []; let isoSeq = 0;
+    const isoPermits = D.ptw.filter((p) => ['Issued', 'Re Issued', 'Completed By Applicant', 'Completed By Controller', 'Closed'].includes(p.status));
+    for (let i = 0; i < 11; i++) {
+      const p = isoPermits[(i * 7 + 3) % isoPermits.length]; const b = bOf[p.bl_id];
+      const age = Math.max(0, Math.floor((NOW - Date.parse(p.date_created)) / DAY));
+      const closedP = ['Closed', 'Completed By Controller', 'Completed By Applicant'].includes(p.status);
+      const prep = mkWr({ age, b, prob: 'PTW-PREP', ptw: p, status: 'Completed' });
+      const deiso = mkWr({ age, b, prob: 'PTW-DEISO', ptw: p, status: closedP ? 'Completed' : pick(['Issued and In Process', 'Assigned to Work Order', 'Completed']) });
+      deiso.prep_wr_id = prep.id;
+      [prep, deiso].forEach((w, wi) => {
+        for (let k = ri(1, 2); k > 0; k--) {
+          const finished = ['Completed', 'Closed'].includes(w.status);
+          const st = finished ? 'Completed' : wp(wi === 0 ? [['Requested', 2], ['Isolated', 3]] : [['Requested', 2], ['De-Isolated', 2]]);
+          const req = Math.min(Date.parse(w.date_requested), NOW - 3600e3);
+          D.iso.push({ id: 5000 + isoSeq++, wr_id: w.id, ptw_id: p.id, system: pick(['Electrical', 'Mechanical', 'Fire', 'Water']), point: pick(['DB-GF-01', 'Valve V-12', 'Isolator ISO-3', 'Pump P-2 breaker', 'Riser R4 valve']), isolation_type: pick(['Lock Out Tag Out', 'Valve Closure', 'Breaker Off']), status: st, requested_by: p.applicant, date_requested: I(req), date_isolated: st === 'Requested' ? null : I(Math.min(req + 3600e3, NOW - 1800e3)), date_deisolated: ['De-Isolated', 'Completed'].includes(st) ? I(Math.min(req + 2 * DAY, NOW - 600e3)) : null });
+        }
+      });
+    }
+    const wrOfPtw = {}; D.wr.forEach((w) => { if (w.ptw_id && !wrOfPtw[w.ptw_id]) wrOfPtw[w.ptw_id] = w; });
 
     /* ---- other resources (RFE) & lines ---- */
     const RES = { Material: ['Copper pipe 22mm', 'Replacement contactor', 'Ceiling tiles (box)', 'Fan motor', 'Sealant and gaskets', 'LED panel lights'], Subcontract: ['Specialist crane lift', 'Facade access cradle team', 'Pump overhaul by OEM', 'Waterproofing subcontractor'], 'Equipment Rental': ['Scissor lift hire', 'Dewatering pump hire', 'Scaffold hire'], Manpower: ['Additional electricians (2)', 'Night-shift labour', 'Weekend crew'] };
     const UOM = ['EA', 'M', 'KG', 'HR', 'DAY', 'LS'];
     D.other_resources = []; D.rfe_lines = [];
-    const rfeWr = D.wr.filter((w) => !['Requested', 'Rejected', 'Cancelled'].includes(w.status));
+    const rfeWr = D.wr.filter((w) => !['Requested', 'Rejected', 'Cancelled'].includes(w.status) && !String(w.prob_type).startsWith('PTW-') && w.est_cost > 0);
     for (let i = 0; i < 300; i++) {
       const w = pick(rfeWr); w.has_rfe = true; const rt = pick(Object.keys(RES)); const q = ri(1, 20); const uc = ri(2, 120) * 5;
       const dt = Math.max(Date.parse(w.date_requested), Math.min(NOW - 3600e3, Date.parse(w.date_requested) + ri(0, 10) * DAY));
-      const young = NOW - dt < 20 * DAY; const st = young ? wp([['Pending', 6], ['Approved', 3], ['Done', 1]]) : wp([['Done', 6], ['Approved', 4], ['Rejected', 1], ['Pending', 1.5]]);
+      const young = NOW - dt < 20 * DAY; const st = young ? wp([['Pending', 6], ['Approved', 3]]) : wp([['Approved', 7], ['Rejected', 1], ['Pending', 2]]);
+      const approved = st === 'Approved';
       const id = 400000 + i * 3 + ri(0, 2);
-      D.other_resources.push({ id, wr_id: w.id, date_used: I(dt), time_used: pad(ri(7, 18), 2) + ':' + pad(ri(0, 59), 2), description: pick(RES[rt]), resource_type: rt, qty_estimated: q, unit_cost: uc, cost_estimated: q * uc, status: st, rfe_pending: st === 'Pending', comments: chance(0.3) ? [{ date: I(dt + 3600e3), by: 'Nadia Farouk', text: 'Please provide a quotation.' }] : [], approved_by: ['Approved', 'Done'].includes(st) ? 'Nadia Farouk' : '', date_approved: ['Approved', 'Done'].includes(st) ? I(Math.min(NOW - 3600e3, dt + DAY)) : null, variation: chance(0.1) });
+      D.other_resources.push({ id, wr_id: w.id, date_used: I(dt), time_used: pad(ri(7, 18), 2) + ':' + pad(ri(0, 59), 2), description: pick(RES[rt]), resource_type: rt, qty_estimated: q, unit_cost: uc, cost_estimated: q * uc, status: st, is_done: st === 'Rejected' ? false : chance(approved ? 0.65 : 0.3), comments: chance(0.3) || st === 'Rejected' ? [{ date: I(dt + 3600e3), by: 'Nadia Farouk', text: st === 'Rejected' ? 'Rejected - quotation too high.' : 'Please provide a quotation.' }] : [], approved_by: approved ? 'Nadia Farouk' : '', date_approved: approved ? I(Math.min(NOW - 3600e3, dt + DAY)) : null, variation: chance(0.1) });
       if (chance(0.55)) for (let l = ri(1, 3); l > 0; l--) { const lq = ri(1, 10); const ur = ri(3, 90) * 5; D.rfe_lines.push({ id: D.rfe_lines.length + 1, other_res_id: id, wr_id: w.id, item_code: 'BOQ-' + ri(100, 160), description: pick(RES[rt]), uom: pick(UOM), qty: lq, unit_rate: ur, amount: lq * ur }); }
     }
+    // at most ONE 'DEFAULT RFE' per work request (~40% of the work requests that have resources)
+    const resByWr = {}; D.other_resources.forEach((r) => (resByWr[r.wr_id] = resByWr[r.wr_id] || []).push(r));
+    const wrById = {}; D.wr.forEach((w) => (wrById[w.id] = w));
+    Object.keys(resByWr).sort().forEach((k) => { if (chance(0.4)) { const r0 = resByWr[k][0]; r0.resource_type = 'DEFAULT RFE'; r0.description = 'Default RFE - ' + String(wrById[k].description).slice(0, 60); } });
+    Object.keys(resByWr).forEach((k) => { wrById[k].cost_est_total = wrById[k].est_cost + resByWr[k].filter((r) => r.status !== 'Rejected').reduce((s, r) => s + r.cost_estimated, 0); });
+    // pending estimate / schedule steps for the demo contractor (On Demand WRs that are Approved / Assigned)
+    D.wr.forEach((w) => {
+      if (w.wr_type !== 'On Demand' || String(w.prob_type).startsWith('PTW-') || !['Approved', 'Assigned to Work Order'].includes(w.status)) return;
+      w.step_type = w.status === 'Approved' ? (chance(0.8) ? 'estimation' : 'scheduling') : (chance(0.8) ? 'scheduling' : 'estimation');
+      w.assigned_to_me = chance(0.55);
+    });
 
     /* ---- labor ---- */
     D.labor = [];
@@ -226,28 +304,71 @@
     const DT = ['Risk Assessment', 'Method Statement', 'Toolbox Talk', 'Insurance', 'Competency Certificate'];
     for (let i = 0; i < 150; i++) {
       const p = pick(D.ptw); const t = pick(DT);
-      D.hse_docs.push({ id: i + 1, ptw_id: p.id, wr_id: p.wr_id, doc_type: t, file_name: (p.id + '_' + t).replace(/\s+/g, '_') + '.pdf', uploaded_by: p.applicant, date_uploaded: I(Math.min(NOW - 3600e3, Date.parse(p.date_created) + 3600e3 * ri(1, 30))), status: wp([['Valid', 75], ['Expired', 15], ['Error', 10]]) });
+      D.hse_docs.push({ id: i + 1, ptw_id: p.id, wr_id: wrOfPtw[p.id] ? wrOfPtw[p.id].id : null, doc_type: t, file_name: (p.id + '_' + t).replace(/\s+/g, '_') + '.pdf', uploaded_by: p.applicant, date_uploaded: I(Math.min(NOW - 3600e3, Date.parse(p.date_created) + 3600e3 * ri(1, 30))), status: wp([['Valid', 75], ['Expired', 15], ['Error', 10]]) });
     }
     D.error_docs = D.hse_docs.filter((d) => d.status === 'Error').slice(0, 8).map((d, i) => ({ id: i + 1, wr_id: d.wr_id, ptw_id: d.ptw_id, file_name: d.file_name, error: pick(['File is corrupted', 'Unsupported file format', 'Virus scan failed', 'File exceeds size limit']), uploaded_by: d.uploaded_by, date_uploaded: d.date_uploaded }));
 
     /* ---- invoices ---- */
     D.invoices = [];
-    D.wr.filter((w) => ['Completed', 'Closed'].includes(w.status)).slice(0, 130).forEach((w, i) => {
-      const fin = Date.parse(w.date_completed); const roAmt = w.act_cost || w.est_cost; const roD = Math.min(NOW - 3600e3, fin + ri(1, 5) * DAY); const invD = Math.min(NOW - 1800e3, roD + ri(2, 15) * DAY);
+    D.wr.filter((w) => ['Completed', 'Closed'].includes(w.status) && w.date_completed).slice(0, 130).forEach((w, i) => {
+      const fin = Date.parse(w.date_completed); const roAmt = w.act_cost || w.est_cost || 100; const roD = Math.min(NOW - 3600e3, fin + ri(1, 5) * DAY); const invD = Math.min(NOW - 1800e3, roD + ri(2, 15) * DAY);
       const paid = invD < NOW - 30 * DAY && chance(0.7);
       D.invoices.push({ id: i + 1, wr_id: w.id, wr_type: w.wr_type, group_code: 'GRP-0' + ri(1, 6), bpa_number: 'BPA-26-0' + ri(1, 4), release_order: 'RO-' + ri(200000, 299999), ro_date: I(roD), ro_amount: roAmt, invoice_no: 'SINV-' + ri(10000, 99999), invoice_date: I(invD), invoice_amount: Math.round(roAmt * (0.95 + rnd() * 0.05)), paid, status: paid ? 'Paid' : wp([['Draft', 1], ['Submitted', 3], ['Approved', 3]]) });
     });
 
     /* ---- incidents ---- */
-    const ITYPES = ['OBJECT FALLING FROM HEIGHT', 'IMPACT ON ASSET', 'SLIP TRIP FALL', 'FIRE', 'ELECTRIC SHOCK', 'VEHICLE COLLISION', 'NEAR MISS', 'ENVIRONMENTAL SPILL'];
-    const IDESC = { 'OBJECT FALLING FROM HEIGHT': 'Tool fell from scaffold platform', 'IMPACT ON ASSET': 'Equipment struck glass panel during move', 'SLIP TRIP FALL': 'Worker slipped on wet floor', FIRE: 'Small fire in waste bin', 'ELECTRIC SHOCK': 'Minor shock from damaged cable', 'VEHICLE COLLISION': 'Utility vehicle reversed into bollard', 'NEAR MISS': 'Unsecured ladder noticed before use', 'ENVIRONMENTAL SPILL': 'Oil leak from generator drip tray' };
+    const ITYPES = { HS: ['OBJECT FALLING FROM HEIGHT', 'SLIP TRIP FALL', 'ELECTRIC SHOCK', 'NEAR MISS', 'VEHICLE COLLISION'], ENV: ['ENVIRONMENTAL SPILL', 'WASTE DISPOSAL VIOLATION', 'EXCESSIVE NOISE'], SEC: ['UNAUTHORISED ACCESS', 'THEFT', 'VANDALISM'], 'F&I': ['FIRE', 'FLOOD'], INF: ['IMPACT ON ASSET', 'EQUIPMENT FAILURE', 'STRUCTURAL DEFECT'] };
+    const IDESC = { 'OBJECT FALLING FROM HEIGHT': 'Tool fell from scaffold platform', 'IMPACT ON ASSET': 'Equipment struck glass panel during move', 'SLIP TRIP FALL': 'Worker slipped on wet floor', FIRE: 'Small fire in waste bin', 'ELECTRIC SHOCK': 'Minor shock from damaged cable', 'VEHICLE COLLISION': 'Utility vehicle reversed into bollard', 'NEAR MISS': 'Unsecured ladder noticed before use', 'ENVIRONMENTAL SPILL': 'Oil leak from generator drip tray', 'WASTE DISPOSAL VIOLATION': 'Chemical containers left in general waste area', 'EXCESSIVE NOISE': 'Generator noise above permitted level at night', 'UNAUTHORISED ACCESS': 'Unbadged person found in plant room', THEFT: 'Tools reported missing from contractor store', VANDALISM: 'Graffiti on service yard wall', FLOOD: 'Burst pipe flooded basement corridor', 'EQUIPMENT FAILURE': 'Pump seized during operation', 'STRUCTURAL DEFECT': 'Crack noticed in external staircase' };
+    const INJ_CAT = ['First Aid Case', 'Medical Treatment Case', 'Restricted Work Case', 'Lost Time Injury'];
+    const INJ_AREA = ['Head', 'Hand', 'Back', 'Leg', 'Eye', 'Arm', 'Foot', 'Torso'];
     D.incidents = [];
     for (let i = 0; i < 200; i++) {
-      const b = bOf[pick(bldIds)]; const t = pick(ITYPES); const age = rdays(); const rp = person();
-      D.incidents.push({ id: 10001 + i, date_incident: I(ago(age)), incident_type: t, affected_person: chance(0.15) ? 'Visitor' : person().name, site_id: b.site_id, property_code: b.id, description: IDESC[t], severity: wp([['Minor', 8], ['Moderate', 4], ['Major', 1.5], ['Critical', 0.5]]), status: age > 60 ? wp([['Closed', 8], ['Action Required', 1]]) : wp([['Reported', 3], ['Under Investigation', 3], ['Action Required', 2], ['Closed', 2]]), reported_by: rp.name, contractor: chance(0.5) });
+      const b = bOf[pick(bldIds)]; const age = rdays();
+      let area = wp([['HS', 50], ['ENV', 16], ['SEC', 8], ['F&I', 13], ['INF', 13]]);
+      let rec = chance(0.3) ? 'contractor' : pick(['supervisor', 'admin'].concat(others.map((o) => o.username)));
+      let status = age > 60 ? wp([['Closed', 5], ['Approved', 4], ['Rejected', 1], ['Submitted', 1]]) : wp([['Draft', 2], ['Submitted', 5], ['Approved', 3], ['Rejected', 1], ['Closed', 1]]);
+      let forceA = null;
+      if (i < 2) { area = 'SEC'; rec = 'contractor'; status = i ? 'Submitted' : 'Approved'; }
+      else if (i < 5) { area = 'HS'; rec = 'contractor'; status = 'Draft'; }
+      else if (i < 8) { rec = i === 5 ? 'supervisor' : 'admin'; status = 'Draft'; }
+      else if (i < 12) { status = 'Submitted'; forceA = ['supervisor', 'admin', 'contractor', pick(others).username]; }
+      else if (i < 15) { status = 'Submitted'; forceA = ['admin', 'supervisor']; }
+      const t = pick(ITYPES[area]); const dtm = ago(age); const dd = new Date(dtm);
+      const person0 = area === 'HS' ? (chance(0.15) ? 'Visitor' : person().name) : (chance(0.25) ? person().name : '');
+      const rp = person();
+      // approver chain (1..4 distinct usernames)
+      let chain = [];
+      if (status !== 'Draft') {
+        if (forceA) chain = forceA.slice(0, i < 12 ? 4 : 2);
+        else { chain = [chance(0.7) ? pick(['supervisor', 'admin']) : pick(others).username]; const pool = ['supervisor', 'admin'].concat(others.slice(0, 4).map((o) => o.username)); for (let n = ri(0, 3); n > 0; n--) { const c = pick(pool); if (!chain.includes(c)) chain.push(c); } }
+      }
+      const n = chain.length; const stt = [null, null, null, null]; const comm = [null, null, null, null]; const adt = [null, null, null, null];
+      let tcur = Math.min(NOW - 1800e3, dtm + ri(0, 2) * DAY + 3600e3);
+      const submitted = status === 'Draft' ? null : tcur;
+      const decide = (k, s, text) => { tcur = Math.min(NOW - 600e3, Math.max(tcur, dtm) + ri(1, 3) * DAY); stt[k] = s; comm[k] = text; adt[k] = I(tcur); };
+      if (status !== 'Draft') {
+        for (let k = 0; k < n; k++) stt[k] = 'Submitted';
+        let j = 0;
+        if (status === 'Approved' || status === 'Closed') j = n;
+        else if (status === 'Submitted') j = forceA ? (i < 12 ? (i % 2 ? 0 : 1) : 0) : ri(0, n - 1);
+        else if (status === 'Rejected') j = ri(0, n - 1);
+        if (i < 2 && n < 2) j = n;
+        for (let k = 0; k < j; k++) decide(k, 'Approved', pick(['Reviewed and approved.', 'Actions are adequate.', 'OK to proceed.']));
+        if (status === 'Rejected') decide(j, 'Rejected', pick(['Please add the missing witness statement.', 'Location details are incomplete.', 'Description lacks root cause.']));
+      }
+      const allApproved = n > 0 && stt.slice(0, n).every((s) => s === 'Approved');
+      if (status === 'Submitted' && allApproved) { stt[n - 1] = 'Submitted'; comm[n - 1] = null; adt[n - 1] = null; }
+      const row = {
+        id: 10001 + i, incident_area: area, incident_type: t, date_incident: I(dtm), time_incident: pad(dd.getHours(), 2) + ':' + pad(dd.getMinutes(), 2), recorded_by: rec, reported_by: rp.name,
+        affected_person: person0, injury_category: area === 'HS' && person0 ? pick(INJ_CAT) : '', injured_area: area === 'HS' && person0 ? pick(INJ_AREA) : '',
+        severity: wp([['Minor', 8], ['Moderate', 4], ['Major', 1.5], ['Critical', 0.5]]), description: IDESC[t], site_id: b.site_id, property_code: b.id, status, date_submitted: I(submitted),
+        date_approved: ['Approved', 'Closed'].includes(status) ? adt[n - 1] : null, linked_sr_ids: status !== 'Draft' && chance(0.2) ? [pick(D.wr).id] : [], contractor: rec === 'contractor'
+      };
+      for (let k = 0; k < 4; k++) { row['approver' + (k + 1)] = chain[k] || null; row['approver' + (k + 1) + '_status'] = stt[k]; row['approver' + (k + 1) + '_comm'] = comm[k]; row['approver' + (k + 1) + '_date'] = adt[k]; }
+      D.incidents.push(row);
     }
     D.incident_actions = [];
-    D.incidents.filter((x) => x.severity !== 'Minor' || chance(0.3)).slice(0, 120).forEach((x, i) => {
+    D.incidents.filter((x) => x.status !== 'Draft' && (x.severity !== 'Minor' || chance(0.3))).slice(0, 120).forEach((x, i) => {
       const due = Date.parse(x.date_incident) + ri(7, 30) * DAY; let st = x.status === 'Closed' ? 'Completed' : wp([['Open', 3], ['In Progress', 3], ['Completed', 2]]);
       if (st !== 'Completed' && due < NOW) st = 'Overdue';
       D.incident_actions.push({ id: i + 1, incident_id: x.id, action: pick(['Install additional signage', 'Retrain staff on procedure', 'Repair damaged item', 'Review risk assessment', 'Add edge protection', 'Update permit conditions']), responsible: person().name, date_due: I(due), date_completed: st === 'Completed' ? I(Math.min(NOW - 3600e3, due - ri(0, 5) * DAY)) : null, status: st });
@@ -332,6 +453,20 @@
     audit() { const r = call('GET', '/api/audit'); if (!r.ok) { report(r); return []; } return r.body; },
     /* generic API call for admin/auth endpoints: returns { ok, status, body }; shows a toast on failure */
     request(method, url, body) { const r = call(method, url, body); if (!r.ok) report(r); return r; },
+    /* Workflow action on one record: POST /api/act/:table/:id/:action -> { row, related: { table: [rows] }, warnings: [] }.
+       Updates the cache with the returned row and any related rows the server changed. Returns the row, or null on error. */
+    action(t, id, name, body) {
+      const r = call('POST', '/api/act/' + t + '/' + encodeURIComponent(id) + '/' + name, body || {});
+      if (!r.ok) { report(r); return null; }
+      const res = r.body || {};
+      Object.entries(res.related || {}).forEach(([rt, rows]) => rows.forEach((row) => upsertCache(rt, row)));
+      if (!res.row) return true;
+      const row = DB.get(t, id);
+      if (row) { Object.keys(row).forEach((k) => { if (!(k in res.row)) delete row[k]; }); return Object.assign(row, res.row); }
+      return upsertCache(t, res.row);
+    },
+    /* Bulk action (e.g. create one PTW for several WRs): POST /api/act/:table/_bulk/:action */
+    bulk(t, name, body) { return DB.action(t, '_bulk', name, body); },
     login(username, password, project) { return call('POST', '/api/auth/login', { username, password, project }); },
     logout() { return call('POST', '/api/auth/logout'); }
   };

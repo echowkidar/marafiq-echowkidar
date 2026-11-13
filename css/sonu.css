@@ -230,6 +230,18 @@ table.grid tr.row-orange td { color: var(--warn); }
 table.grid tr.row-blue td { color: var(--info); }
 table.grid tr.row-green td { background: rgba(22, 163, 74, .08); }
 table.grid .acts a { margin-right: 14px; font-weight: 500; }
+/* RFE / other-resources row states (pending · done · done and approved), as in the reference portal */
+table.grid tr.row-rfe-pending td { background: #d5ffd5; }
+table.grid tr.row-rfe-done td { background: #ffd485; }
+table.grid tr.row-rfe-approved td { background: #ffaeae; }
+:root[data-theme="dark"] table.grid tr.row-rfe-pending td { background: rgba(34, 197, 94, .16); }
+:root[data-theme="dark"] table.grid tr.row-rfe-done td { background: rgba(245, 158, 11, .2); }
+:root[data-theme="dark"] table.grid tr.row-rfe-approved td { background: rgba(244, 63, 94, .2); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) table.grid tr.row-rfe-pending td { background: rgba(34, 197, 94, .16); }
+  :root:not([data-theme="light"]) table.grid tr.row-rfe-done td { background: rgba(245, 158, 11, .2); }
+  :root:not([data-theme="light"]) table.grid tr.row-rfe-approved td { background: rgba(244, 63, 94, .2); }
+}
 .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: #334155; line-height: 1.6; }
 .badge.ok { background: #dcfce7; color: #166534; } .badge.warn { background: #fef3c7; color: #92400e; }
 .badge.bad { background: #fee2e2; color: #991b1b; } .badge.info { background: #dbeafe; color: #1e40af; }

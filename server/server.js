@@ -100,11 +100,26 @@ function seed() {
       q.putUser.run(u.id, u.username, salt, hashPw(SEED_PASSWORD || password, salt), JSON.stringify(profile));
     }
     if (!SEED_PASSWORD) console.warn('WARNING: demo accounts use the public default password. Set SEED_PASSWORD before exposing this server.');
-    db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run('seeded_at', new Date().toISOString());
+    setMeta('seeded_at', new Date().toISOString()); setMeta('data_model', DATA_MODEL);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
+/* DATA_MODEL is bumped whenever the demo data structure changes. On start-up an older database gets fresh demo
+   data (docs only) — user accounts, passwords and sessions are kept. */
+const DATA_MODEL = '2';
+function setMeta(k, v) { db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(k, v); }
+function reseedDocs() {
+  const D = buildSeed();
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM docs;');
+    for (const [tbl, rows] of Object.entries(D)) { if (tbl === 'users') continue; for (const r of rows) q.put.run(tbl, String(r.id), JSON.stringify(r)); }
+    setMeta('data_model', DATA_MODEL); db.exec('COMMIT');
+    if (typeof TABLES !== 'undefined') q.tables.all().forEach((x) => TABLES.add(x.tbl));
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
 if (!db.prepare("SELECT v FROM meta WHERE k = 'seeded_at'").get()) { seed(); console.log('Database seeded.'); }
+else if ((db.prepare("SELECT v FROM meta WHERE k = 'data_model'").get() || {}).v !== DATA_MODEL) { reseedDocs(); console.log(`Demo data upgraded to data model ${DATA_MODEL} (user accounts kept).`); }
 
 const TABLES = new Set(q.tables.all().map((r) => r.tbl));
 const all = (t) => q.all.all(t).map((r) => JSON.parse(r.data));
@@ -126,7 +141,23 @@ const ROLE_RANK = { Contractor: 1, Supervisor: 2, Administrator: 3 };
 const atLeast = (user, role) => (ROLE_RANK[user.role] || 0) >= ROLE_RANK[role];
 
 const WR_STATUS = ['Requested', 'Reviewed but On Hold', 'Rejected', 'Approved', 'Assigned to Work Order', 'Issued and In Process', 'On Hold for Parts', 'On Hold for Access', 'On Hold for Labor', 'Not Handymen Work', 'Stopped', 'Cancelled', 'Completed', 'Closed', 'Contractor Completed'];
-const PTW_STATUS = ['Requested', 'Authorized', 'Issued', 'Re Issued', 'Waiting For Re Issuing', 'Completed By Applicant', 'Completed By Controller', 'Closed', 'Rejected', 'Stopped by Authority'];
+/* Permit-to-work lifecycle (mirrors the reference portal: Req → APP → AUT → I → CA → CP → Clo, with RI/WRI re-issue loop and Rej). */
+const PTW_STATUS = ['Requested', 'Applied', 'Authorized', 'Issued', 'Re Issued', 'Waiting For Re Issuing', 'Completed By Applicant', 'Completed By Controller', 'Closed', 'Rejected'];
+const PTW_NEXT = {
+  'Requested': ['Applied', 'Rejected'],
+  'Applied': ['Authorized', 'Rejected'],
+  'Authorized': ['Issued', 'Rejected'],
+  'Issued': ['Completed By Applicant', 'Waiting For Re Issuing'],
+  'Re Issued': ['Completed By Applicant', 'Waiting For Re Issuing'],
+  'Waiting For Re Issuing': ['Re Issued'],
+  'Completed By Applicant': ['Completed By Controller'],
+  'Completed By Controller': ['Closed'],
+  'Closed': [], 'Rejected': []
+};
+/* who may move a permit into a status: applicant side vs. controller/authority side */
+const PTW_APPLICANT_STEPS = new Set(['Applied', 'Completed By Applicant', 'Waiting For Re Issuing']);
+const PTW_ISSUED = new Set(['Issued', 'Re Issued']);
+const INCIDENT_AREAS = ['HS', 'ENV', 'SEC', 'F&I', 'INF'];
 const required = (row, fields) => { const miss = fields.filter((f) => row[f] == null || row[f] === ''); if (miss.length) fail('Missing required field(s): ' + miss.join(', ')); };
 const oneOf = (v, list, label) => { if (v != null && v !== '' && !list.includes(v)) fail(`Invalid ${label}: ${v}`); };
 const site = (id) => (id ? get('sites', id) : null);
@@ -165,47 +196,51 @@ const RULES = {
     }
   },
   ptw: {
+    /* Create PTW form: project (with an engineer), active site, building, description, department and division are required. */
     insert(r, u) {
-      r.id = nextId('ptw', 'C-'); r.date_created = now(); r.status = r.status || 'Requested';
-      r.applicant = r.applicant || u.name; r.applicant_username = r.applicant_username || u.username;
-      r.communications = r.communications || [];
-      required(r, ['site_id', 'description']);
-      if (r.wr_id && !get('wr', r.wr_id)) fail('Unknown work request: ' + r.wr_id);
-      if (r.date_start && r.date_end && r.date_end < r.date_start) fail('Permit end date must be after start date');
-      fillLocation(r); r.history = []; pushHistory(r, 'Permit requested', u);
-      if (r.wr_id) { const w = get('wr', r.wr_id); put('wr', { ...w, ptw_id: r.id, ptw_status: r.status }); }
+      r.id = nextId('ptw', 'C-'); r.ptw_code = r.id; r.date_created = now(); r.status = 'Requested';
+      r.created_by = u.username; r.applicant = r.applicant || u.name; r.applicant_username = r.applicant_username || u.username;
+      r.priority = Number(r.priority || 1); r.communications = []; r.daily_endorsement_needed = r.daily_endorsement_needed || 'No';
+      if (!r.__from_wrs) {
+        required(r, ['project_code', 'site_id', 'bl_id', 'description', 'dp_id']);
+        checkProject(r.project_code);
+        const dp = get('departments', r.dp_id); if (!dp) fail('Unknown department: ' + r.dp_id);
+        r.dv_id = r.dv_id || dp.dv_id; required(r, ['dv_id']);
+      }
+      delete r.__from_wrs;
+      const s = site(r.site_id); if (s && s.status === 'In-Active') fail(`Site ${r.site_id} is inactive and cannot be used for new permits`);
+      ptwDates(r); fillLocation(r);
+      r.date_issued = null; r.date_end = null;
+      r.history = []; pushHistory(r, 'Permit requested', u);
       return r;
     },
+    /* plain edits: status changes must go through the transition action; dates stay consistent */
     update(p, x, u) {
+      if ('status' in x && x.status !== p.status) fail('Use the permit workflow actions to change the status', 400);
+      if (['Closed', 'Rejected'].includes(p.status) && !atLeast(u, 'Supervisor')) fail(`Permit ${p.id} is ${p.status}`, 403);
+      for (const k of ['date_issued', 'ptw_code', 'created_by', 'history']) delete x[k];
       const r = { ...p, ...x };
-      oneOf(r.status, PTW_STATUS, 'permit status');
-      if (r.date_start && r.date_end && r.date_end < r.date_start) fail('Permit end date must be after start date');
-      if (x.status && x.status !== p.status) {
-        if (p.status === 'Closed' && !atLeast(u, 'Supervisor')) fail(`Permit ${p.id} is closed`, 403);
-        if (x.status === 'Closed') r.date_closed = now();
-        if (['Issued', 'Re Issued'].includes(x.status) && !r.date_issued) r.date_issued = now();
-        if (x.status === 'Stopped by Authority') r.stopped = true;
-        pushHistory(r, `Status: ${p.status} → ${x.status}`, u);
-        if (r.wr_id) { const w = get('wr', r.wr_id); if (w) put('wr', { ...w, ptw_status: x.status }); }
-      } else if (x.date_end && x.date_end !== p.date_end) pushHistory(r, 'Validity changed to ' + x.date_end.slice(0, 10), u);
-      fillLocation(r); return r;
+      ptwDates(r); fillLocation(r);
+      if (x.date_upto && x.date_upto !== p.date_upto) pushHistory(r, 'Validity changed to ' + String(x.date_upto).slice(0, 10), u);
+      return r;
     }
   },
   other_resources: {
+    /* RFE / other resources: one DEFAULT RFE per work request; done-flag and approval are independent */
     insert(r, u) {
-      r.id = nextId('other_resources'); r.date_used = r.date_used || now(); r.status = r.status || 'Pending';
-      r.rfe_pending = r.rfe_pending ?? true; r.comments = r.comments || [];
-      if (r.wr_id && !get('wr', r.wr_id)) fail('Unknown work request: ' + r.wr_id);
+      r.id = nextId('other_resources'); r.date_used = r.date_used || now(); r.status = 'Pending';
+      r.is_done = false; r.date_approved = null; r.comments = []; r.created_by_name = u.name;
       required(r, ['wr_id', 'description']);
+      if (!get('wr', r.wr_id)) fail('Unknown work request: ' + r.wr_id);
+      if (r.resource_type === 'DEFAULT RFE' && all('other_resources').some((o) => String(o.wr_id) === String(r.wr_id) && o.resource_type === 'DEFAULT RFE'))
+        fail('You cannot assign more than one DEFAULT RFE to one work request.', 409);
       return RULES.other_resources.calc(r);
     },
     update(p, x, u) {
-      const r = RULES.other_resources.calc({ ...p, ...x });
-      if (x.status && x.status !== p.status && ['Approved', 'Rejected'].includes(x.status)) {
-        if (!atLeast(u, 'Supervisor')) fail('Only a supervisor can approve or reject estimations', 403);
-        r.approved_by = u.name; r.date_approved = now(); r.rfe_pending = false;
-      }
-      return r;
+      for (const k of ['status', 'date_approved', 'approved_by', 'is_done']) if (k in x && x[k] !== p[k]) fail('Use the RFE actions (Done / Approve / Reject) for ' + k, 400);
+      if (x.resource_type === 'DEFAULT RFE' && p.resource_type !== 'DEFAULT RFE' && all('other_resources').some((o) => String(o.wr_id) === String(p.wr_id) && o.resource_type === 'DEFAULT RFE' && o.id !== p.id))
+        fail('You cannot assign more than one DEFAULT RFE to one work request.', 409);
+      return RULES.other_resources.calc({ ...p, ...x });
     },
     calc(r) {
       const qty = Number(r.qty_estimated), rate = Number(r.unit_cost);
@@ -221,7 +256,20 @@ const RULES = {
     check(r) { const s = Number(r.hours_straight || 0), o = Number(r.hours_overtime || 0); if (s < 0 || o < 0 || s + o > 24) fail('Daily hours must be between 0 and 24'); if (r.wr_id && !get('wr', r.wr_id)) fail('Unknown work request: ' + r.wr_id); }
   },
   incidents: {
-    insert(r, u) { r.id = nextId('incidents'); r.status = r.status || 'Reported'; r.reported_by = r.reported_by || u.name; r.date_incident = r.date_incident || now(); required(r, ['incident_type', 'description']); return r; }
+    insert(r, u) {
+      r.id = nextId('incidents'); r.status = 'Draft'; r.recorded_by = u.username; r.reported_by = r.reported_by || u.name;
+      r.incident_area = r.incident_area || 'HS';
+      for (let i = 1; i <= 4; i++) { r['approver' + i] = null; r[`approver${i}_status`] = null; r[`approver${i}_comm`] = ''; r[`approver${i}_date`] = null; }
+      r.date_approved = null; r.linked_sr_ids = r.linked_sr_ids || [];
+      validateIncident(r); return r;
+    },
+    /* edit lock: only the recorder, and only before the approval chain has started */
+    update(p, x, u) {
+      if (!incidentEditable(p, u)) fail('This incident can no longer be edited (only the recorder can edit it before approval starts).', 403);
+      for (const k of Object.keys(x)) if (/^approver|^status$|^date_approved$|^recorded_by$/.test(k)) delete x[k];
+      const r = { ...p, ...x }; validateIncident(r); return r;
+    },
+    canDelete: (u, row) => incidentEditable(row, u)
   },
   incident_actions: {
     update(p, x) { const r = { ...p, ...x }; if (x.status === 'Completed' && !r.date_completed) r.date_completed = now(); return r; }
@@ -254,7 +302,157 @@ const RULES = {
     canDelete: (u, row) => row.booked_by === u.name || atLeast(u, 'Supervisor')
   }
 };
-const READ_ONLY = new Set(['sites', 'buildings', 'floors', 'trades', 'work_teams', 'craftspersons']);
+const READ_ONLY = new Set(['sites', 'buildings', 'floors', 'trades', 'work_teams', 'craftspersons', 'projects', 'departments', 'divisions']);
+
+/* ---------- helpers for the workflow rules ---------- */
+function checkProject(code) {
+  const pr = get('projects', code); if (!pr) fail('Unknown project: ' + code);
+  if (!pr.engineer) fail('Project engineer is missing for the selected project. Please update project details.');
+  return pr;
+}
+function ptwDates(r) {
+  if (r.date_start && r.date_upto && r.date_upto < r.date_start) fail('Permit "valid until" date must be on or after the start date');
+  if (r.date_end && r.date_start && r.date_end < r.date_start) fail('Permit end date must be on or after the start date');
+}
+const isOpenWr = (w) => !['Completed', 'Closed', 'Contractor Completed', 'Cancelled', 'Rejected'].includes(w.status);
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+function validateIncident(r) {
+  required(r, ['incident_type', 'description', 'date_incident']);
+  if (!INCIDENT_AREAS.includes(r.incident_area)) fail('Please select the incident area');
+  if (!r.time_incident || !/^\d{2}:\d{2}$/.test(r.time_incident)) fail('Please select the time of the incident (HH:MM)');
+  if (new Date(r.date_incident) > new Date()) fail('The incident date cannot be in the future');
+  if (r.date_death && new Date(r.date_death) > new Date()) fail('The date of death cannot be in the future');
+  if (r.incident_area === 'HS' && r.affected_person && (!r.injury_category || !r.injured_area)) fail('Please provide the injury category and injured area');
+}
+const approvers = (r) => [1, 2, 3, 4].map((i) => r['approver' + i]).filter(Boolean);
+const incidentEditable = (r, u) => (r.recorded_by === u.username || atLeast(u, 'Administrator')) && ['Draft', 'Rejected'].includes(r.status); // a rejected incident goes back to the recorder for changes
+/* SEC (security) incidents are visible only to the recorder, the assigned approvers and administrators */
+const canSeeIncident = (r, u) => r.incident_area !== 'SEC' || r.recorded_by === u.username || approvers(r).includes(u.username) || atLeast(u, 'Administrator');
+const VISIBLE = { incidents: canSeeIncident };
+const visibleRows = (t, rows, u) => (VISIBLE[t] ? rows.filter((r) => VISIBLE[t](r, u)) : rows);
+
+/* ---------- workflow actions: POST /api/act/:table/:id/:action  (id "_bulk" for multi-record actions) ----------
+   each returns { row?, related?: { table: [rows] }, warnings?: [] } */
+const ACTIONS = {
+  ptw: {
+    transition(p, b, u) {
+      const to = b.to; oneOf(to, PTW_STATUS, 'permit status');
+      if (!(PTW_NEXT[p.status] || []).includes(to)) fail(`A permit cannot move from "${p.status}" to "${to}"`, 409);
+      const applicantSide = PTW_APPLICANT_STEPS.has(to);
+      const isApplicant = p.applicant_username === u.username || p.created_by === u.username;
+      if (applicantSide && !isApplicant && !atLeast(u, 'Supervisor')) fail('Only the permit applicant can do this', 403);
+      if (!applicantSide && !atLeast(u, 'Supervisor')) fail(`Only a controller / authority (supervisor) can set "${to}"`, 403);
+      if (to === 'Rejected' && !String(b.reason || '').trim()) fail('Please give a reason for rejecting the permit');
+      const r = { ...p, status: to };
+      if (PTW_ISSUED.has(to)) r.date_issued = now();
+      if (to === 'Re Issued' && p.requested_date_upto) { r.date_upto = p.requested_date_upto; delete r.requested_date_upto; }
+      if (to === 'Closed') { r.date_closed = now(); r.date_end = r.date_end || now(); }
+      if (to === 'Rejected') r.reject_reason = b.reason;
+      pushHistory(r, `Status: ${p.status} → ${to}${b.reason ? ' — ' + b.reason : ''}`, u);
+      const related = all('wr').filter((w) => String(w.ptw_id) === String(p.id)).map((w) => put('wr', { ...w, ptw_status: to }));
+      return { row: r, related: { wr: related } };
+    },
+    renew(p, b, u) {
+      if (!PTW_ISSUED.has(p.status)) fail('Only an issued permit can be renewed', 409);
+      if (!b.date_upto) fail('Please give the new "valid until" date');
+      if (b.date_upto <= (p.date_upto || '')) fail('The new validity must be later than the current one');
+      return ACTIONS.ptw.transition({ ...p, requested_date_upto: b.date_upto }, { to: 'Waiting For Re Issuing', reason: 'Renewal requested until ' + String(b.date_upto).slice(0, 10) }, u);
+    },
+    stop(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only an authority (supervisor) can stop a permit', 403);
+      if (!PTW_ISSUED.has(p.status)) fail('Only an issued permit can be stopped', 409);
+      if (!String(b.reason || '').trim()) fail('Please give a reason for stopping the permit');
+      const r = { ...p, date_end: now(), stop_reason: b.reason }; pushHistory(r, 'Permit stopped — ' + b.reason, u);
+      return { row: r };
+    },
+    /* one permit for several work requests (Create PTW from the WR grids) */
+    from_wrs(_, b, u) {
+      const ids = Array.isArray(b.wr_ids) ? b.wr_ids : [];
+      if (!ids.length) fail('Please select at least one work request');
+      const wrs = ids.map((id) => get('wr', id) || fail('Unknown work request: ' + id));
+      const bad = wrs.find((w) => /PTW-/.test(w.prob_type || '')); if (bad) fail(`Work request ${bad.id} is itself a permit/isolation request and cannot get a permit`);
+      const has = wrs.find((w) => w.ptw_id); if (has) fail(`Work request ${has.id} already has permit ${has.ptw_id}`, 409);
+      const first = wrs[0];
+      const starts = wrs.map((w) => w.date_to_perform).filter(Boolean).sort();
+      const r = RULES.ptw.insert({ __from_wrs: true, site_id: first.site_id, bl_id: first.bl_id, fl_id: first.fl_id, project_code: first.project_code || null,
+        description: b.description || `Permit for work request${wrs.length > 1 ? 's' : ''} ${ids.join(', ')}`, work_team: first.work_team,
+        date_start: starts[0] || now(), date_upto: b.date_upto || new Date(Date.now() + 7 * 864e5).toISOString(), work_type: b.work_type || 'Cold Work' }, u);
+      r.created_by = u.username; r.created_at = now(); put('ptw', r); audit(u, 'insert', 'ptw', r.id, { from_wrs: ids });
+      const related = wrs.map((w) => put('wr', { ...w, ptw_id: r.id, ptw_status: r.status }));
+      return { row: r, related: { ptw: [r], wr: related }, created: true };
+    }
+  },
+  wr: {
+    /* Issue selected WRs (Assigned to Work Order → Issued and In Process). Soft gate: permit missing / not issued needs confirm:true */
+    issue(_, b, u) {
+      const ids = Array.isArray(b.wr_ids) ? b.wr_ids : [];
+      if (!ids.length) fail('Please select at least one work request');
+      const wrs = ids.map((id) => get('wr', id) || fail('Unknown work request: ' + id));
+      const notReady = wrs.find((w) => w.status !== 'Assigned to Work Order'); if (notReady) fail(`Work request ${notReady.id} is "${notReady.status}"; only "Assigned to Work Order" can be issued`, 409);
+      const warnings = [];
+      if (wrs.some((w) => !w.ptw_id)) warnings.push('PTW is not created for one of the requests.');
+      if (wrs.some((w) => w.ptw_id && !PTW_ISSUED.has((get('ptw', w.ptw_id) || {}).status))) warnings.push('PTW is not issued for one of the work requests.');
+      if (warnings.length && b.confirm !== true) { const e = new HttpError(409, warnings.join(' ') + ' Confirm to continue.'); e.warnings = warnings; throw e; }
+      const related = wrs.map((w) => { const r = { ...w, status: 'Issued and In Process', date_issued: now() }; pushHistory(r, 'Status: Assigned to Work Order → Issued and In Process', u); r.updated_by = u.username; r.updated_at = now(); audit(u, 'issue', 'wr', w.id, { warnings }); return put('wr', r); });
+      return { related: { wr: related }, warnings };
+    }
+  },
+  other_resources: {
+    done(p, b, u) { if (p.is_done) fail('Already marked done', 409); const r = { ...p, is_done: true, date_done: now(), done_by: u.name }; return { row: r }; },
+    approve(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only a supervisor can approve estimations', 403);
+      if (p.status !== 'Pending') fail(`This estimation is already ${p.status}`, 409);
+      return { row: { ...p, status: 'Approved', date_approved: now(), approved_by: u.name, variation: b.variation === true || !!p.variation } };
+    },
+    reject(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only a supervisor can reject estimations', 403);
+      if (p.status !== 'Pending') fail(`This estimation is already ${p.status}`, 409);
+      if (!String(b.comment || '').trim()) fail('Please give a comment for the rejection');
+      const r = { ...p, status: 'Rejected', approved_by: u.name, comments: [...(p.comments || []), { date: now(), by: u.name, text: b.comment }] };
+      return { row: r };
+    },
+    comment(p, b, u) { if (!String(b.comment || '').trim()) fail('Comment is empty'); return { row: { ...p, comments: [...(p.comments || []), { date: now(), by: u.name, text: b.comment }] } }; }
+  },
+  iso: {
+    /* completion guard: earlier ISO/De-ISO requests on the same permit, and the linked isolation WR, must be finished first */
+    complete(p, b, u) {
+      if (p.status === 'Completed') fail('Already completed', 409);
+      const earlier = all('iso').filter((o) => o.id !== p.id && p.ptw_id && String(o.ptw_id) === String(p.ptw_id) && o.status !== 'Completed' && String(o.date_requested) < String(p.date_requested));
+      if (earlier.length) fail('Please complete the previous ISO/De-ISO requests first (' + earlier.map((o) => o.id).join(', ') + ').', 409);
+      const w = p.wr_id && get('wr', p.wr_id);
+      if (w && w.prep_wr_id) { const prep = get('wr', w.prep_wr_id); if (prep && isOpenWr(prep)) fail(`Please complete the corresponding isolation work request #${prep.id} first.`, 409); }
+      const r = { ...p, status: 'Completed', date_completed: now(), completed_by: u.name };
+      return { row: r };
+    }
+  },
+  incidents: {
+    submit(p, b, u) {
+      if (!incidentEditable(p, u)) fail('Only the recorder can send this incident for approval, and only once', 403);
+      const list = (Array.isArray(b.approvers) ? b.approvers : []).map((x) => String(x || '').trim());
+      if (!list[0]) fail('Please select approver 1');
+      const chosen = list.filter(Boolean);
+      if (new Set(chosen).size !== chosen.length) fail('Approvers must be different people');
+      if (chosen.includes(p.recorded_by)) fail('The recorder cannot approve their own incident');
+      chosen.forEach((x) => { if (!q.userByName.get(x)) fail('Unknown approver: ' + x); });
+      const r = { ...p, status: 'Submitted' };
+      for (let i = 1; i <= 4; i++) { r['approver' + i] = list[i - 1] || null; r[`approver${i}_status`] = list[i - 1] ? 'Submitted' : null; r[`approver${i}_comm`] = ''; r[`approver${i}_date`] = null; }
+      return { row: r };
+    },
+    approve(p, b, u) { return ACTIONS.incidents._decide(p, b, u, 'Approved'); },
+    reject(p, b, u) { if (!String(b.comment || '').trim()) fail('Please provide a comment for the rejection'); return ACTIONS.incidents._decide(p, b, u, 'Rejected'); },
+    _decide(p, b, u, decision) {
+      if (p.status !== 'Submitted') fail(`This incident is ${p.status}`, 409);
+      // approvers decide in order: the current one is the first still "Submitted"
+      const i = [1, 2, 3, 4].find((k) => p['approver' + k] && p[`approver${k}_status`] === 'Submitted');
+      if (!i) fail('No approval is pending', 409);
+      if (p['approver' + i] !== u.username && !atLeast(u, 'Administrator')) fail('It is not your turn to approve this incident', 403);
+      const r = { ...p, [`approver${i}_status`]: decision, [`approver${i}_comm`]: String(b.comment || ''), [`approver${i}_date`]: now() };
+      if (decision === 'Rejected') r.status = 'Rejected';
+      else if (![1, 2, 3, 4].some((k) => r['approver' + k] && r[`approver${k}_status`] !== 'Approved')) { r.status = 'Approved'; r.date_approved = now(); }
+      return { row: r };
+    }
+  }
+};
 
 /* ============================== http helpers ============================== */
 const send = (res, status, body, headers = {}) => {
@@ -451,18 +649,35 @@ async function api(req, res, url) {
 
   if (p === '/api/bootstrap' && m === 'GET') {
     const tables = {};
-    for (const t of TABLES) tables[t] = all(t);
+    for (const t of TABLES) tables[t] = visibleRows(t, all(t), user);
     tables.users = db.prepare('SELECT id, username, profile FROM users').all().map((u) => ({ id: u.id, username: u.username, ...JSON.parse(u.profile) }));
     return send(res, 200, { user: publicUser(user), tables });
   }
 
   if (p === '/api/reset' && m === 'POST') {
     if (!atLeast(user, 'Administrator')) fail('Only an administrator can reset the demo data.', 403);
-    seed(); audit(user, 'reset'); return send(res, 200, { ok: true });
+    reseedDocs(); audit(user, 'reset'); return send(res, 200, { ok: true }); // demo data only; user accounts are kept
   }
   if (p === '/api/audit' && m === 'GET') {
     if (!atLeast(user, 'Supervisor')) fail('Not permitted', 403);
     return send(res, 200, q.auditList.all().map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : null })));
+  }
+
+  /* workflow actions: POST /api/act/:table/:id/:action (id "_bulk" for multi-record actions) */
+  const am = p.match(/^\/api\/act\/([a-z_]+)\/([^/]+)\/([a-z_]+)$/);
+  if (am && m === 'POST') {
+    const [, t, rawId, name] = am; const id = decodeURIComponent(rawId);
+    const fn = ACTIONS[t] && !name.startsWith('_') && ACTIONS[t][name];
+    if (!fn) fail('Unknown action: ' + t + '/' + name, 404);
+    const body = await readBody(req);
+    let prev = null;
+    if (id !== '_bulk') { prev = get(t, id); if (!prev || !visibleRows(t, [prev], user).length) fail('Not found', 404); }
+    const out = fn.call(ACTIONS[t], prev, body || {}, user) || {};
+    if (out.row && !out.created) {
+      const row = { ...out.row, id: prev.id, updated_by: user.username, updated_at: now() }; put(t, row); out.row = row;
+      audit(user, name, t, prev.id, Object.fromEntries(Object.keys(row).filter((k) => !['history', 'updated_at', 'updated_by'].includes(k) && JSON.stringify(prev[k]) !== JSON.stringify(row[k])).map((k) => [k, { from: prev[k], to: row[k] }])));
+    }
+    return send(res, 200, { row: out.row || null, related: out.related || {}, warnings: out.warnings || [] });
   }
 
   const tm = p.match(/^\/api\/t\/([a-z_]+)(?:\/([^/]+))?$/);
@@ -471,8 +686,8 @@ async function api(req, res, url) {
     if (t === 'users' || !TABLES.has(t)) fail('Unknown table: ' + t, 404);
     const rule = RULES[t] || {};
     if (m === 'GET') {
-      if (!id) return send(res, 200, all(t));
-      const row = get(t, id); if (!row) fail('Not found', 404); return send(res, 200, row);
+      if (!id) return send(res, 200, visibleRows(t, all(t), user));
+      const row = get(t, id); if (!row || !visibleRows(t, [row], user).length) fail('Not found', 404); return send(res, 200, row);
     }
     if (READ_ONLY.has(t) && !atLeast(user, 'Administrator')) fail(`${t} is reference data and is read-only`, 403);
     if (m === 'POST' && !id) {
@@ -486,7 +701,7 @@ async function api(req, res, url) {
       return send(res, 201, row);
     }
     if (m === 'PATCH' && id) {
-      const prev = get(t, id); if (!prev) fail('Not found', 404);
+      const prev = get(t, id); if (!prev || !visibleRows(t, [prev], user).length) fail('Not found', 404);
       const patch = sanitize(await readBody(req));
       const row = rule.update ? rule.update(prev, patch, user) : { ...prev, ...patch };
       row.id = prev.id; row.updated_by = user.username; row.updated_at = now();
@@ -496,7 +711,7 @@ async function api(req, res, url) {
       return send(res, 200, row);
     }
     if (m === 'DELETE' && id) {
-      const prev = get(t, id); if (!prev) fail('Not found', 404);
+      const prev = get(t, id); if (!prev || !visibleRows(t, [prev], user).length) fail('Not found', 404);
       const allowed = rule.canDelete ? rule.canDelete(user, prev) : atLeast(user, 'Administrator');
       if (!allowed) fail('You are not allowed to delete this record', 403);
       q.del.run(t, String(id)); audit(user, 'delete', t, id, prev);
@@ -561,7 +776,7 @@ const server = http.createServer(async (req, res) => {
       await api(req, res, url);
     } else serveStatic(req, res, url);
   } catch (e) {
-    if (e instanceof HttpError) send(res, e.status, { error: e.message });
+    if (e instanceof HttpError) send(res, e.status, e.warnings ? { error: e.message, warnings: e.warnings } : { error: e.message });
     else { console.error(e); send(res, 500, { error: 'Server error' }); }
   }
 });

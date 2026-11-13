@@ -101,5 +101,32 @@ REA attached read-only over CDP to a separate Chrome profile in which the user s
 
 **Feature parity:** every task in the reference menu (§3) has a SONU page. Group labels became headings, and the ERP-reports label became a "Release Orders & Invoices" page. SONU adds an Administration module (users, sessions, reference data, activity log) that the contractor account could not see in the reference portal.
 
-## 8. How SONU maps to it
+## 8. Deep REA pass (read-only, 2026-11-13)
+Ten portal pages were opened one by one in the user's signed-in session, using page loads only (no clicks, no form input, no saves). Their network traffic was analysed with REA: `inspect-web-network-capture`, `environment-build`, `analyze-javascript-application` and `trace-javascript-semantics`. Raw captures were deleted after analysis.
+
+SONU's backend now follows the workflow rules this revealed. SONU's own code implements them; nothing was copied.
+- **Permit to Work lifecycle:**
+  - Statuses run Requested → Applied → Authorized → Issued → Completed By Applicant → Completed By Controller → Closed. Re-issue goes through Waiting For Re Issuing → Re Issued, and a permit can be Rejected (with a reason).
+  - The applicant takes the applicant-side steps; the controller/authority takes the rest.
+  - Dates are start, valid until, end (stop) and issued.
+  - Rows are coloured by expiry (expired, expiring within 2 days, stopped).
+  - The default list hides Closed and Rejected permits, and "Who are you?" sets the role filter.
+- **Create PTW:**
+  - Project (which must have an engineer), active site, building, department and division are required.
+  - One permit can cover several work requests. Permit and isolation requests cannot get a permit, and work requests that already have one are refused.
+- **Issue work requests:** a soft gate warns when the permit is missing or not issued and asks for confirmation.
+- **RFE:**
+  - Only one DEFAULT RFE is allowed per work request.
+  - "Done" and "approved" are independent.
+  - Only supervisors approve or reject, and rejecting needs a comment.
+  - Rows are colour-coded, and the approval list shows the total estimated cost.
+- **ISO/De-ISO:** completion is blocked while earlier requests on the permit, or the linked isolation work request, are still open.
+- **Incidents:**
+  - Areas are HS, ENV, SEC, F&I and INF.
+  - Up to four approvers decide in order, and rejecting requires a comment.
+  - Only the recorder can edit, and only before approval starts.
+  - SEC incidents are visible only to the people involved.
+  - Validation covers future dates, time, and injury details for HS incidents.
+
+## 9. How SONU maps to it
 SONU (`index.html`, `app.html`) reproduces the shell, the full menu tree, the filter/grid/tab/chart/form patterns and the workflow above with its **own branding, colours, logo and fictional data**. No logos, photos, text content or records from the reference system were copied.
