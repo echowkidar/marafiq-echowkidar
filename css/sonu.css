@@ -320,6 +320,48 @@ table.grid tr.row-rfe-approved td { background: #ffaeae; }
 .toast.err { background: #7f1d1d; border-left-color: #fca5a5; }
 @keyframes tin { from { transform: translateY(10px); opacity: 0; } }
 
+/* catalog cards */
+.cat-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; padding: 16px; }
+.cat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, box-shadow .15s, transform .12s; }
+.cat-card:hover { border-color: var(--brand); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+.cat-card .cat-icon { font-size: 28px; width: 48px; height: 48px; border-radius: 10px; background: var(--brand-soft); display: flex; align-items: center; justify-content: center; }
+.cat-card .cat-title { font-weight: 700; font-size: 15px; color: var(--text); }
+.cat-card .cat-desc { font-size: 13px; color: var(--muted); line-height: 1.4; flex: 1; }
+.cat-card .cat-examples { font-size: 11.5px; color: var(--text-2); background: var(--bg); padding: 8px 10px; border-radius: 6px; }
+
+/* tracking stepper */
+.track-step-bar { display: flex; align-items: center; justify-content: space-between; position: relative; padding: 24px 30px; margin: 10px 0; background: var(--panel); border-radius: var(--radius); }
+.track-step { display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; z-index: 1; flex: 1; }
+.track-circle { width: 36px; height: 36px; border-radius: 50%; background: var(--line); color: var(--muted); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; margin-bottom: 8px; transition: all .2s; }
+.track-step.done .track-circle { background: var(--ok); color: #fff; }
+.track-step.active .track-circle { background: var(--brand); color: #fff; box-shadow: 0 0 0 4px rgba(29, 78, 216, .2); }
+.track-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.track-sub { font-size: 11px; color: var(--muted); }
+.track-line { position: absolute; top: 42px; left: 10%; right: 10%; height: 3px; background: var(--line); z-index: 0; }
+.track-line-fill { height: 100%; background: var(--ok); transition: width .3s; }
+
+/* desk grid */
+.desk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; padding: 16px; }
+.desk-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.desk-card.available { border-top: 3px solid var(--ok); }
+.desk-card.reserved { border-top: 3px solid var(--accent); opacity: 0.9; }
+.desk-card.occupied { border-top: 3px solid var(--muted); opacity: 0.65; }
+.desk-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.desk-tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--brand-soft); color: var(--brand); font-weight: 500; }
+
+/* floor plans & svg */
+.floorplan-wrap { background: #0f172a; border-radius: var(--radius-lg); padding: 20px; overflow: auto; text-align: center; }
+.floorplan-svg text { font-family: Inter, sans-serif; user-select: none; }
+.floorplan-room { cursor: pointer; transition: opacity .15s, stroke-width .15s; }
+.floorplan-room:hover { opacity: 0.82; stroke-width: 2.5; stroke: #fff !important; }
+
+/* bpa tracking */
+.bpa-progress-box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+.bpa-progress-track { height: 14px; background: var(--line); border-radius: 999px; overflow: hidden; display: flex; margin: 10px 0; }
+.bpa-bar-invoiced { background: var(--brand); }
+.bpa-bar-committed { background: var(--accent); }
+.bpa-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+
 /* responsive */
 .mob-only { display: none !important; }
 @media (max-width: 760px) {

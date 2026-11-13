@@ -784,7 +784,7 @@
 
   /* ---------------------------------------------------------- Administration (adminOnly) ---------------------------------------------------------- */
   const api = (m, u, b) => DB.request(m, u, b);
-  const ROLES = ['Contractor', 'Supervisor', 'Administrator'];
+  const ROLES = ['Employee', 'Contractor', 'Finance', 'Supervisor', 'Administrator'];
   const fld = (field, label, type, extra) => Object.assign({ field, label, type: type || 'text' }, extra || {});
   const shortUA = (ua) => { ua = String(ua || ''); const m = ua.match(/(Edg|OPR|Firefox|Chrome|Safari)\/(\d+)/); const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : ''; return m ? ({ Edg: 'Edge', OPR: 'Opera' }[m[1]] || m[1]) + ' ' + m[2] + (os ? ' / ' + os : '') : ua.slice(0, 40); };
   const fmtUp = (s) => { s = Math.floor(s || 0); const d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60); return d ? `${d}d ${hh}h` : hh ? `${hh}h ${mm}m` : `${mm}m`; };
@@ -869,6 +869,1378 @@
     [fT('id', 'Code'), fT('name', 'Name'), fS('trade', 'Trade', tradeOpts)]);
   V['admin-craftspersons'] = refView('craftspersons', 'Craftspersons', 'Craftsperson', [fld('name', 'Name', 'text', { required: true }), sel('trade', 'Trade', tradeOpts), sel('work_team', 'Work Team', teamOpts)],
     cols('id|Code', 'name|Name', 'trade|Trade', 'work_team|Work Team'), [fT('id', 'Code'), fT('name', 'Name'), fS('trade', 'Trade', tradeOpts), fS('work_team', 'Work Team', teamOpts)]);
+
+  /* =====================================================================
+   * WORKPLACE SERVICES
+   * ===================================================================== */
+  const SR_CATEGORIES = [
+    { id: 'hvac', name: 'Temperature & HVAC', icon: '❄️', desc: 'Air conditioning, heating, thermostat calibration and airflow adjustments.', examples: 'Too cold / too hot, unit noise, no airflow', prob: 'HVAC' },
+    { id: 'cleaning', name: 'Cleaning & Janitorial', icon: '🧹', desc: 'Office hygiene, trash disposal, carpet vacuuming and washroom restocking.', examples: 'Liquid spills, pantry trash, window cleaning', prob: 'JAN' },
+    { id: 'access', name: 'Keys & Access Cards', icon: '🔑', desc: 'Building smart cards, key duplication, office locks and badge permissions.', examples: 'New badge, jammed door lock, replacement card', prob: 'GSER' },
+    { id: 'electrical', name: 'Electrical & Lighting', icon: '💡', desc: 'Light fixtures, switches, tripping power sockets, UPS and circuit breakers.', examples: 'Flickering LED, socket tripping, dead outlet', prob: 'ELEC' },
+    { id: 'plumbing', name: 'Plumbing & Water', icon: '🚰', desc: 'Water dispensers, pantry sinks, washroom fixtures, drainage and leaks.', examples: 'Slow drain, leaking faucet, low pressure', prob: 'PLUMB' },
+    { id: 'furniture', name: 'Furniture & Ergonomics', icon: '🪑', desc: 'Office chairs, height-adjustable desks, whiteboard installation, cabinet locks.', examples: 'Chair replacement, whiteboard mount, table repair', prob: 'GSER' }
+  ];
+
+  function openSrModal(catName, ctx, after) {
+    const f = UI.buildForm([
+      { title: 'Location', fields: [
+        fld('site_id', 'Site Code', 'select', { options: siteOpts, default: 'EC', required: true }),
+        fld('bl_id', 'Building Code', 'select', { options: bldOpts, required: true }),
+        fld('fl_id', 'Floor', 'select', { options: ['GF', 'L1', 'L2'], default: 'GF', required: true }),
+        fld('location', 'Room / Specific Location', 'text', { required: true })
+      ]},
+      { title: 'Request Details', fields: [
+        fld('category', 'Category', 'readonly', { default: catName }),
+        fld('priority', 'Priority', 'select', { options: ['1 - Emergency', '2 - Urgent', '3 - Standard', '4 - Low', '5 - Scheduled'], default: '3 - Standard' }),
+        fld('description', 'Detailed Description', 'textarea', { required: true }),
+        fld('phone', 'Contact Extension / Mobile', 'text', { default: me().phone || '4454-0000' })
+      ]}
+    ], null, {});
+    UI.modal('New Service Request — ' + catName, f, [{
+      label: 'Submit Request', cls: 'primary', onClick: (close) => {
+        const { vals, missing } = f.read();
+        if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+        const prioNum = parseInt(vals.priority, 10) || 3;
+        const count = DB.all('service_requests').length + 1;
+        const rec = DB.insert('service_requests', {
+          req_code: 'SR-2026-' + String(8000 + count),
+          requestor_name: me().name || 'Aya Mansoor',
+          requestor_username: me().username || 'employee',
+          department: me().company || 'Academic Affairs',
+          category: catName,
+          description: vals.description,
+          site_id: vals.site_id || 'EC',
+          bl_id: vals.bl_id,
+          fl_id: vals.fl_id || 'GF',
+          location: vals.location || '',
+          priority: prioNum,
+          status: 'Requested',
+          created_at: nowIso(),
+          target_completion: new Date(Date.now() + (prioNum <= 2 ? 1 : 3) * DAY).toISOString().slice(0, 10)
+        });
+        UI.toast('Service Request ' + rec.req_code + ' submitted successfully.');
+        close();
+        if (after) after(); else if (ctx && ctx.open) ctx.open('my-service-requests');
+      }
+    }]);
+  }
+
+  V['sr-catalog'] = {
+    type: 'custom', title: 'Create Service Request', render(root, ctx) {
+      const p = UI.h(`<div class="panel"><div class="panel-head"><span class="ttl">Workplace Service Catalog</span><span class="sp"></span><button class="btn" data-my>My Requests</button></div>
+        <div class="legend" style="padding:12px 16px;border-bottom:1px solid var(--line);color:var(--muted)">Select a service category below to submit a facilities maintenance or assistance request. Our engineering team reviews and dispatches requests within agreed SLAs.</div>
+        <div class="cat-cards"></div>
+      </div>`);
+      p.querySelector('[data-my]').onclick = () => ctx.open('my-service-requests');
+      const container = p.querySelector('.cat-cards');
+      SR_CATEGORIES.forEach((cat) => {
+        const c = UI.h(`<div class="cat-card">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="cat-icon">${cat.icon}</div>
+            <div>
+              <div class="cat-title">${esc(cat.name)}</div>
+              <span class="badge info">SLA: 4-24 hrs</span>
+            </div>
+          </div>
+          <div class="cat-desc">${esc(cat.desc)}</div>
+          <div class="cat-examples"><b>Examples:</b> ${esc(cat.examples)}</div>
+          <button class="btn primary" style="width:100%;margin-top:auto">Raise Request &rarr;</button>
+        </div>`);
+        c.querySelector('button').onclick = () => openSrModal(cat.name, ctx);
+        container.appendChild(c);
+      });
+      root.appendChild(p);
+    }
+  };
+
+  V['my-service-requests'] = {
+    type: 'grid', title: 'My Service Requests', gridTitle: 'My Service Requests', table: 'service_requests',
+    where: (r) => { const u = me().username; return u === 'admin' || u === 'supervisor' || u === 'finance' || r.requestor_username === u; },
+    filters: [
+      fS('status', 'Status', ['Requested', 'In Triage', 'Dispatched', 'In Progress', 'Completed', 'Rejected', 'Cancelled']),
+      fS('category', 'Category', SR_CATEGORIES.map(c => c.name)),
+      fS('bl_id', 'Building', bldOpts)
+    ],
+    columns: [
+      { field: 'req_code', label: 'Request Code' },
+      { field: 'created_at', label: 'Date Requested', type: 'date' },
+      { field: 'category', label: 'Category' },
+      { field: 'bl_id', label: 'Building' },
+      { field: 'fl_id', label: 'Floor' },
+      { field: 'description', label: 'Description' },
+      { field: 'priority', label: 'Priority', type: 'number' },
+      { field: 'status', label: 'Status', type: 'status' },
+      { field: 'target_completion', label: 'Target Date', type: 'date' },
+      { field: 'assigned_team', label: 'Assigned Team' },
+      { field: 'satisfaction_rating', label: 'Satisfaction', render: (r) => {
+        if (r.satisfaction_rating) return '<span style="color:#f59e0b;font-size:14px">' + '★'.repeat(r.satisfaction_rating) + '</span>';
+        if (r.status === 'Completed') return '<span class="badge warn">Pending Rating</span>';
+        return '<span style="color:var(--muted)">-</span>';
+      }}
+    ],
+    sort: { field: 'id', dir: 'desc' },
+    toolbar: [{ label: 'New Request', cls: 'primary', onClick: (ctx) => ctx.open('sr-catalog') }],
+    rowActions: [
+      { label: 'Track', onClick: (r, ctx) => ctx.open('sr-tracking', { req_id: r.id }) },
+      { label: 'Rate & Feedback', show: (r) => r.status === 'Completed' && !r.satisfaction_rating, onClick: (r, ctx, g) => {
+        const form = UI.buildForm([{ title: 'Rate Service Quality', fields: [
+          fld('satisfaction_rating', 'Rating (1 to 5 Stars)', 'select', { options: ['5 - Excellent', '4 - Very Good', '3 - Satisfactory', '2 - Poor', '1 - Unacceptable'], required: true, default: '5 - Excellent' }),
+          fld('feedback_notes', 'Comments / Feedback', 'textarea', { required: true })
+        ]}], null, {});
+        UI.modal('Feedback for ' + r.req_code, form, [{
+          label: 'Submit Feedback', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = form.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            DB.update('service_requests', r.id, { satisfaction_rating: parseInt(vals.satisfaction_rating, 10) || 5, feedback_notes: vals.feedback_notes });
+            UI.toast('Thank you for your rating!');
+            close();
+            g.refresh();
+          }
+        }]);
+      }},
+      { label: 'Cancel', show: (r) => r.status === 'Requested', onClick: (r, ctx, g) => {
+        if (confirm('Cancel request ' + r.req_code + '?')) {
+          DB.update('service_requests', r.id, { status: 'Cancelled' });
+          UI.toast('Request cancelled');
+          g.refresh();
+        }
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['sr-tracking'] = {
+    type: 'custom', title: 'Service Request Tracking', render(root, ctx) {
+      const allSrs = DB.all('service_requests');
+      if (!allSrs.length) { root.appendChild(UI.h('<div class="noresults">No service requests found.</div>')); return; }
+      let selId = (ctx.params && ctx.params.req_id) || allSrs[allSrs.length - 1].id;
+      let cur = DB.get('service_requests', selId) || allSrs[allSrs.length - 1];
+
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Track Request</span>
+            <select data-sr style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--line-strong)"></select>
+            <span class="sp"></span>
+            <button class="btn" data-new>+ New Request</button>
+          </div>
+          <div data-body style="padding:16px"></div>
+        </div>
+      </div>`);
+
+      wrap.querySelector('[data-new]').onclick = () => ctx.open('sr-catalog');
+      const sel = wrap.querySelector('[data-sr]');
+      allSrs.slice(-30).reverse().forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.req_code} - ${s.category} (${s.status})`;
+        if (String(s.id) === String(cur.id)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+
+      const drawDetails = (sr) => {
+        const body = wrap.querySelector('[data-body]');
+        body.innerHTML = '';
+
+        const steps = [
+          { title: 'Requested', sub: 'Submitted by user' },
+          { title: 'In Triage', sub: 'Facilities review' },
+          { title: 'Dispatched', sub: 'Assigned to team' },
+          { title: 'In Progress', sub: 'Contractor on-site' },
+          { title: 'Completed', sub: 'Handover & rated' }
+        ];
+        let stepIdx = 0;
+        if (sr.status === 'Requested') stepIdx = 0;
+        else if (sr.status === 'In Triage') stepIdx = 1;
+        else if (sr.status === 'Dispatched') stepIdx = 2;
+        else if (sr.status === 'In Progress') stepIdx = 3;
+        else if (sr.status === 'Completed' || sr.status === 'Closed') stepIdx = 4;
+        else if (sr.status === 'Rejected' || sr.status === 'Cancelled') stepIdx = -1;
+
+        const fillPct = stepIdx < 0 ? 0 : Math.round((stepIdx / (steps.length - 1)) * 100);
+
+        const stepper = UI.h(`<div style="margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div><b style="font-size:16px;color:var(--text)">${esc(sr.req_code)}</b> &mdash; <span class="badge ${STATUS_CLASS(sr.status)}">${esc(sr.status)}</span></div>
+            <div style="font-size:12.5px;color:var(--muted)">Target Date: <b>${esc(UI.fmtDate(sr.target_completion) || 'Within 24h')}</b></div>
+          </div>
+          ${stepIdx < 0 ? `<div class="badge bad" style="font-size:13px;padding:6px 12px">Request ${esc(sr.status)}: ${esc(sr.rejection_reason || 'Request closed before completion.')}</div>` : `
+          <div class="track-step-bar">
+            <div class="track-line"><div class="track-line-fill" style="width:${fillPct}%"></div></div>
+            ${steps.map((st, idx) => {
+              const cls = idx < stepIdx ? 'done' : (idx === stepIdx ? 'active' : '');
+              const icon = idx < stepIdx ? '✓' : String(idx + 1);
+              return `<div class="track-step ${cls}">
+                <div class="track-circle">${icon}</div>
+                <div class="track-title">${esc(st.title)}</div>
+                <div class="track-sub">${esc(st.sub)}</div>
+              </div>`;
+            }).join('')}
+          </div>`}
+        </div>`);
+        body.appendChild(stepper);
+
+        const linkedWr = sr.wr_id ? DB.get('wr', sr.wr_id) : null;
+        const linkedPtw = linkedWr && linkedWr.ptw_id ? DB.get('ptw', linkedWr.ptw_id) : null;
+
+        const info = UI.h(`<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:16px">
+          <div class="panel" style="margin:0">
+            <div class="panel-head"><span class="ttl">Service Request Info</span></div>
+            <div class="detail-grid" style="grid-template-columns:1fr">
+              <div><span>Requestor:</span><b>${esc(sr.requestor_name)} (${esc(sr.requestor_username)})</b></div>
+              <div><span>Department:</span><b>${esc(sr.department || 'N/A')}</b></div>
+              <div><span>Category:</span><b>${esc(sr.category)}</b></div>
+              <div><span>Location:</span><b>Building ${esc(sr.bl_id)}, Floor ${esc(sr.fl_id || 'GF')} ${esc(sr.location ? ' - ' + sr.location : '')}</b></div>
+              <div><span>Priority:</span><b>Priority ${esc(sr.priority)}</b></div>
+              <div><span>Submitted:</span><b>${esc(UI.fmtDT(sr.created_at))}</b></div>
+              <div><span>Description:</span><b>${esc(sr.description)}</b></div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin:0">
+            <div class="panel-head"><span class="ttl">Linked Maintenance Order</span></div>
+            <div class="detail-grid" style="grid-template-columns:1fr">
+              <div><span>Work Order Ref:</span><b>${linkedWr ? `<span class="badge info">WR #${linkedWr.id}</span>` : '<span style="color:var(--muted)">Pending Dispatch</span>'}</b></div>
+              <div><span>Work Team:</span><b>${esc(sr.assigned_team || (linkedWr && linkedWr.work_team) || 'Triage Pending')}</b></div>
+              <div><span>Assigned Craftsperson:</span><b>${esc((linkedWr && linkedWr.craftsperson) || 'On Dispatch')}</b></div>
+              <div><span>Target SLA:</span><b>${esc(UI.fmtDate(sr.target_completion))}</b></div>
+              <div><span>Permit to Work (PTW):</span><b>${linkedPtw ? `<span class="badge ok">PTW #${linkedPtw.id} (${linkedPtw.status})</span>` : '<span style="color:var(--muted)">None required / Not issued</span>'}</b></div>
+              <div><span>Contractor Feedback:</span><b>${esc((linkedWr && linkedWr.completion_feedback) || 'Work in progress')}</b></div>
+            </div>
+          </div>
+        </div>`);
+        body.appendChild(info);
+
+        if (sr.satisfaction_rating || sr.feedback_notes) {
+          const fb = UI.h(`<div class="panel" style="margin-top:16px;background:var(--brand-soft);border-color:var(--brand)">
+            <div class="panel-head"><span class="ttl">User Rating & Feedback</span></div>
+            <div style="padding:12px 16px;display:flex;align-items:center;gap:16px">
+              <div style="font-size:24px;color:#f59e0b">${'★'.repeat(sr.satisfaction_rating || 5)}</div>
+              <div>
+                <b>${esc(sr.requestor_name)}:</b> "${esc(sr.feedback_notes || 'Service performed satisfactorily.')}"
+              </div>
+            </div>
+          </div>`);
+          body.appendChild(fb);
+        }
+      };
+
+      sel.onchange = () => {
+        const found = DB.get('service_requests', sel.value);
+        if (found) drawDetails(found);
+      };
+
+      drawDetails(cur);
+      root.appendChild(wrap);
+    }
+  };
+
+  V['reserve-room'] = {
+    type: 'custom', title: 'Reserve a Meeting Room', render(root, ctx) {
+      const allRooms = DB.all('rooms');
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Meeting Room Booking Console</span>
+            <span class="sp"></span>
+            <button class="btn" data-my>My Bookings</button>
+          </div>
+          <div class="form-grid" style="padding:12px 16px;background:var(--panel-head);border-bottom:1px solid var(--line);grid-template-columns:repeat(auto-fit, minmax(180px, 1fr))">
+            <div class="fld"><label>Building</label><div class="ctl"><select data-bl><option value="">All Buildings</option>${bldOpts().map(b => `<option value="${b}">${b}</option>`).join('')}</select></div></div>
+            <div class="fld"><label>Floor</label><div class="ctl"><select data-fl><option value="">All Floors</option><option value="GF">Ground Floor (GF)</option><option value="L1">Level 1 (L1)</option><option value="L2">Level 2 (L2)</option></select></div></div>
+            <div class="fld"><label>Capacity</label><div class="ctl"><select data-cap><option value="0">Any Capacity</option><option value="6">6+ Seats</option><option value="12">12+ Seats</option><option value="20">20+ Seats</option></select></div></div>
+            <div class="fld"><label>Booking Date</label><div class="ctl"><input type="date" data-dt value="${new Date().toISOString().slice(0, 10)}"></div></div>
+          </div>
+          <div class="cat-cards" data-grid></div>
+        </div>
+      </div>`);
+
+      wrap.querySelector('[data-my]').onclick = () => ctx.open('my-reservations');
+      const bSel = wrap.querySelector('[data-bl]'), flSel = wrap.querySelector('[data-fl]'), capSel = wrap.querySelector('[data-cap]'), dtIn = wrap.querySelector('[data-dt]');
+      const container = wrap.querySelector('[data-grid]');
+
+      const drawRooms = () => {
+        container.innerHTML = '';
+        const bVal = bSel.value, flVal = flSel.value, capVal = Number(capSel.value) || 0;
+        const filtered = allRooms.filter((r) => (!bVal || r.bl_id === bVal) && (!flVal || r.fl_id === flVal) && (r.capacity >= capVal));
+        if (!filtered.length) { container.innerHTML = '<div class="noresults" style="grid-column:1/-1">No meeting rooms match the selected criteria.</div>'; return; }
+
+        filtered.forEach((rm) => {
+          const card = UI.h(`<div class="cat-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between">
+              <div>
+                <div class="cat-title">${esc(rm.name)}</div>
+                <div style="font-size:12px;color:var(--muted)">${esc(rm.bl_name || rm.bl_id)} &bull; ${esc(rm.room_code)}</div>
+              </div>
+              <span class="badge ${rm.status === 'Available' ? 'ok' : 'warn'}">${esc(rm.status || 'Available')}</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--text-2);margin-top:4px">
+              <b>Type:</b> ${esc(rm.rm_type)}<br>
+              <b>Capacity:</b> ${esc(rm.capacity)} Persons &bull; <b>Area:</b> ${esc(rm.area_sqm)} m²
+            </div>
+            <div class="cat-examples" style="margin-top:4px"><b>Amenities:</b> ${esc(rm.amenities || 'AV Display, Wi-Fi')}</div>
+            <button class="btn primary" style="width:100%;margin-top:auto">Book Room &rarr;</button>
+          </div>`);
+
+          card.querySelector('button').onclick = () => {
+            const f = UI.buildForm([
+              { title: 'Room Details', fields: [
+                fld('room', 'Room', 'readonly', { default: `${rm.name} (${rm.room_code}) - ${rm.bl_id}` }),
+                fld('date', 'Date', 'date', { default: dtIn.value, required: true }),
+                fld('start', 'Start Time', 'select', { options: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'], default: '09:00', required: true }),
+                fld('end', 'End Time', 'select', { options: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'], default: '10:00', required: true })
+              ]},
+              { title: 'Meeting Info', fields: [
+                fld('purpose', 'Meeting Purpose / Agenda', 'textarea', { required: true }),
+                fld('attendees', 'Expected Attendees', 'number', { default: rm.capacity })
+              ]}
+            ], null, {});
+
+            UI.modal('Book ' + rm.name, f, [{
+              label: 'Confirm Booking', cls: 'primary', onClick: (close) => {
+                const { vals, missing } = f.read();
+                if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+                DB.insert('bookings', {
+                  bl_id: rm.bl_id,
+                  room: `${rm.name} (${rm.room_code})`,
+                  date: vals.date,
+                  start: vals.start,
+                  end: vals.end,
+                  purpose: vals.purpose,
+                  booked_by: me().name || 'Aya Mansoor',
+                  attendees: Number(vals.attendees) || rm.capacity
+                });
+                UI.toast(`Meeting room ${rm.name} booked successfully!`);
+                close();
+                ctx.open('my-reservations');
+              }
+            }]);
+          };
+          container.appendChild(card);
+        });
+      };
+
+      [bSel, flSel, capSel, dtIn].forEach((el) => { el.onchange = drawRooms; });
+      drawRooms();
+      root.appendChild(wrap);
+    }
+  };
+
+  V['reserve-desk'] = {
+    type: 'custom', title: 'Book a Desk (Hoteling)', render(root, ctx) {
+      const allDesks = DB.all('desks');
+      const deskBldOpts = [...new Set(allDesks.map(d => d.bl_id))];
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Hoteling & Desk Reservation</span>
+            <span class="sp"></span>
+            <button class="btn" data-my>My Bookings</button>
+          </div>
+          <div class="form-grid" style="padding:12px 16px;background:var(--panel-head);border-bottom:1px solid var(--line);grid-template-columns:repeat(auto-fit, minmax(200px, 1fr))">
+            <div class="fld"><label>Building</label><div class="ctl"><select data-bl>${deskBldOpts.map(b => `<option value="${b}">${b}</option>`).join('')}</select></div></div>
+            <div class="fld"><label>Floor</label><div class="ctl"><select data-fl><option value="GF">Ground Floor (GF)</option><option value="L1">Level 1 (L1)</option></select></div></div>
+            <div class="fld"><label>Date</label><div class="ctl"><input type="date" data-dt value="${new Date().toISOString().slice(0, 10)}"></div></div>
+          </div>
+          <div class="desk-grid" data-grid></div>
+        </div>
+      </div>`);
+
+      wrap.querySelector('[data-my]').onclick = () => ctx.open('my-reservations');
+      const bSel = wrap.querySelector('[data-bl]'), flSel = wrap.querySelector('[data-fl]'), dtIn = wrap.querySelector('[data-dt]');
+      const container = wrap.querySelector('[data-grid]');
+
+      const drawDesks = () => {
+        container.innerHTML = '';
+        const bVal = bSel.value, flVal = flSel.value;
+        const list = allDesks.filter(d => d.bl_id === bVal && d.fl_id === flVal);
+        if (!list.length) { container.innerHTML = '<div class="noresults" style="grid-column:1/-1">No hoteling desks found for this floor.</div>'; return; }
+
+        list.forEach((desk) => {
+          const isAvail = desk.status === 'Available';
+          const card = UI.h(`<div class="desk-card ${isAvail ? 'available' : (desk.status === 'Reserved' ? 'reserved' : 'occupied')}">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:14px;color:var(--text)">${esc(desk.desk_code)}</b>
+              <span class="badge ${isAvail ? 'ok' : 'warn'}">${esc(desk.status)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted)">${esc(desk.zone)} &bull; ${esc(desk.bl_name || desk.bl_id)}</div>
+            <div class="desk-tags">
+              ${desk.has_dual_monitor ? '<span class="desk-tag">🖥️ Dual Monitors</span>' : ''}
+              ${desk.has_docking_station ? '<span class="desk-tag">⚡ USB-C Dock</span>' : ''}
+              <span class="desk-tag">📶 High-speed Wi-Fi</span>
+            </div>
+            <button class="btn ${isAvail ? 'primary' : ''}" style="margin-top:10px;width:100%" ${isAvail ? '' : 'disabled'}>${isAvail ? 'Book Desk &rarr;' : 'Occupied / Reserved'}</button>
+          </div>`);
+
+          if (isAvail) {
+            card.querySelector('button').onclick = () => {
+              const f = UI.buildForm([
+                { title: 'Hoteling Slot', fields: [
+                  fld('desk', 'Selected Desk', 'readonly', { default: `${desk.desk_code} (${desk.bl_id} - ${desk.fl_id})` }),
+                  fld('date', 'Booking Date', 'date', { default: dtIn.value, required: true }),
+                  fld('slot', 'Reservation Slot', 'select', { options: ['Full Day (08:00 - 17:00)', 'Morning (08:00 - 12:30)', 'Afternoon (12:30 - 17:00)'], default: 'Full Day (08:00 - 17:00)', required: true }),
+                  fld('department', 'Department', 'text', { default: me().company || 'Academic Affairs', required: true })
+                ]}
+              ], null, {});
+
+              UI.modal('Reserve ' + desk.desk_code, f, [{
+                label: 'Confirm Reservation', cls: 'primary', onClick: (close) => {
+                  const { vals, missing } = f.read();
+                  if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+                  DB.insert('desk_bookings', {
+                    desk_id: desk.id,
+                    desk_code: desk.desk_code,
+                    bl_id: desk.bl_id,
+                    fl_id: desk.fl_id,
+                    date: vals.date,
+                    slot: vals.slot,
+                    booked_by: me().name || 'Aya Mansoor',
+                    booked_by_username: me().username || 'employee',
+                    department: vals.department,
+                    status: 'Active',
+                    created_at: nowIso()
+                  });
+                  DB.update('desks', desk.id, { status: 'Reserved' });
+                  UI.toast(`${desk.desk_code} reserved successfully!`);
+                  close();
+                  drawDesks();
+                }
+              }]);
+            };
+          }
+          container.appendChild(card);
+        });
+      };
+
+      [bSel, flSel, dtIn].forEach((el) => { el.onchange = drawDesks; });
+      drawDesks();
+      root.appendChild(wrap);
+    }
+  };
+
+  V['my-reservations'] = {
+    type: 'custom', title: 'My Reservations', render(root, ctx) {
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Meeting Room Reservations</span>
+            <span class="sp"></span>
+            <button class="btn primary" data-new-rm>+ Reserve Room</button>
+          </div>
+          <div class="grid-wrap" data-rm-table></div>
+        </div>
+
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-head">
+            <span class="ttl">Hoteling & Desk Bookings</span>
+            <span class="sp"></span>
+            <button class="btn primary" data-new-dsk>+ Book Desk</button>
+          </div>
+          <div class="grid-wrap" data-dsk-table></div>
+        </div>
+      </div>`);
+
+      wrap.querySelector('[data-new-rm]').onclick = () => ctx.open('reserve-room');
+      wrap.querySelector('[data-new-dsk]').onclick = () => ctx.open('reserve-desk');
+
+      const drawRms = () => {
+        const box = wrap.querySelector('[data-rm-table]');
+        const bookings = DB.all('bookings');
+        if (!bookings.length) { box.innerHTML = '<div class="noresults">No meeting room reservations found.</div>'; return; }
+        box.innerHTML = `<table class="grid"><thead><tr><th>ID</th><th>Building</th><th>Room</th><th>Date</th><th>Time</th><th>Purpose</th><th>Booked By</th><th>Action</th></tr></thead><tbody>${bookings.map(b => `<tr>
+          <td>${esc(b.id)}</td>
+          <td><b>${esc(b.bl_id)}</b></td>
+          <td>${esc(b.room)}</td>
+          <td>${esc(UI.fmtDate(b.date))}</td>
+          <td>${esc(b.start)} - ${esc(b.end)}</td>
+          <td>${esc(b.purpose)}</td>
+          <td>${esc(b.booked_by)}</td>
+          <td><button class="btn" data-del-rm="${esc(b.id)}">Cancel</button></td>
+        </tr>`).join('')}</tbody></table>`;
+
+        box.querySelectorAll('[data-del-rm]').forEach((btn) => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-del-rm');
+            if (confirm('Cancel meeting room reservation ' + id + '?')) {
+              DB.remove('bookings', id);
+              UI.toast('Reservation cancelled');
+              drawRms();
+            }
+          };
+        });
+      };
+
+      const drawDsks = () => {
+        const box = wrap.querySelector('[data-dsk-table]');
+        const dskBookings = DB.all('desk_bookings');
+        if (!dskBookings.length) { box.innerHTML = '<div class="noresults">No desk hoteling reservations found.</div>'; return; }
+        box.innerHTML = `<table class="grid"><thead><tr><th>ID</th><th>Desk Code</th><th>Building</th><th>Floor</th><th>Date</th><th>Slot</th><th>Booked By</th><th>Status</th><th>Action</th></tr></thead><tbody>${dskBookings.map(d => `<tr>
+          <td>${esc(d.id)}</td>
+          <td><b>${esc(d.desk_code)}</b></td>
+          <td>${esc(d.bl_id)}</td>
+          <td>${esc(d.fl_id)}</td>
+          <td>${esc(UI.fmtDate(d.date))}</td>
+          <td>${esc(d.slot)}</td>
+          <td>${esc(d.booked_by)}</td>
+          <td><span class="badge ${STATUS_CLASS(d.status)}">${esc(d.status)}</span></td>
+          <td>
+            ${d.status === 'Active' ? `<button class="btn green" data-checkin="${esc(d.id)}">Check In</button> <button class="btn" data-del-dsk="${esc(d.id)}">Cancel</button>` : ''}
+          </td>
+        </tr>`).join('')}</tbody></table>`;
+
+        box.querySelectorAll('[data-checkin]').forEach((btn) => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-checkin');
+            DB.update('desk_bookings', id, { status: 'Checked In' });
+            UI.toast('Checked in to desk successfully');
+            drawDsks();
+          };
+        });
+
+        box.querySelectorAll('[data-del-dsk]').forEach((btn) => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-del-dsk');
+            if (confirm('Cancel desk reservation ' + id + '?')) {
+              const rec = DB.get('desk_bookings', id);
+              if (rec && rec.desk_id) DB.update('desks', rec.desk_id, { status: 'Available' });
+              DB.update('desk_bookings', id, { status: 'Cancelled' });
+              UI.toast('Desk reservation cancelled');
+              drawDsks();
+            }
+          };
+        });
+      };
+
+      drawRms();
+      drawDsks();
+      root.appendChild(wrap);
+    }
+  };
+
+  /* =====================================================================
+   * FACILITIES ENGINEERING
+   * ===================================================================== */
+  V['eng-triage'] = {
+    type: 'grid', title: 'Service Request Triage Console', gridTitle: 'Incoming Service Requests', table: 'service_requests',
+    filters: [
+      fS('status', 'Status', ['Requested', 'In Triage', 'Dispatched', 'Completed', 'Rejected']),
+      fS('category', 'Category', SR_CATEGORIES.map(c => c.name)),
+      fS('bl_id', 'Building Code', bldOpts),
+      fS('priority', 'Priority', PRIO)
+    ],
+    columns: [
+      { field: 'req_code', label: 'SR Code' },
+      { field: 'created_at', label: 'Date Requested', type: 'date' },
+      { field: 'requestor_name', label: 'Requestor' },
+      { field: 'department', label: 'Department' },
+      { field: 'category', label: 'Category' },
+      { field: 'bl_id', label: 'Building' },
+      { field: 'fl_id', label: 'Floor' },
+      { field: 'description', label: 'Description' },
+      { field: 'priority', label: 'Priority', type: 'number' },
+      { field: 'status', label: 'Status', type: 'status' },
+      { field: 'assigned_team', label: 'Assigned Team' },
+      { field: 'wr_id', label: 'Linked WR' }
+    ],
+    sort: { field: 'id', dir: 'desc' },
+    rowActions: [
+      { label: 'Triage & Accept', show: (r) => r.status === 'Requested', onClick: (r, ctx, g) => {
+        const f = UI.buildForm([{ title: 'Triage Request', fields: [
+          fld('priority', 'Priority', 'select', { options: PRIO, default: String(r.priority || 3), required: true }),
+          fld('target_completion', 'Agreed Target Completion', 'date', { default: r.target_completion || new Date(Date.now() + 2*DAY).toISOString().slice(0, 10), required: true }),
+          fld('triage_notes', 'Engineering Review Notes', 'textarea')
+        ]}], null, {});
+        UI.modal('Triage ' + r.req_code, f, [{
+          label: 'Accept into Triage', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = f.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            DB.update('service_requests', r.id, { status: 'In Triage', priority: Number(vals.priority), target_completion: vals.target_completion, triage_notes: vals.triage_notes });
+            UI.toast('Request ' + r.req_code + ' accepted into triage');
+            close();
+            g.refresh();
+          }
+        }]);
+      }},
+      { label: 'Dispatch to WR', show: (r) => ['Requested', 'In Triage'].includes(r.status), onClick: (r, ctx, g) => {
+        const catObj = SR_CATEGORIES.find(c => c.name === r.category);
+        const f = UI.buildForm([{ title: 'Dispatch to Maintenance Team', fields: [
+          fld('work_team', 'Work Team', 'select', { options: teamOpts, required: true }),
+          fld('prob_type', 'Trade / Problem Type', 'select', { options: tradeOpts, default: catObj ? catObj.prob : 'GSER', required: true }),
+          fld('target_date', 'Agreed Target Date', 'date', { default: r.target_completion || new Date(Date.now() + 2*DAY).toISOString().slice(0, 10), required: true })
+        ]}], null, {});
+        UI.modal('Dispatch ' + r.req_code, f, [{
+          label: 'Create Work Request', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = f.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            const wr = newWr({
+              site_id: r.site_id || 'EC',
+              bl_id: r.bl_id,
+              fl_id: r.fl_id || 'GF',
+              prob_type: vals.prob_type,
+              description: `[${r.req_code}] ${r.description}`,
+              priority: r.priority || 3,
+              status: 'Approved',
+              requestor: r.requestor_name,
+              requestor_username: r.requestor_username,
+              work_team: vals.work_team,
+              date_agreed_target: vals.target_date
+            });
+            DB.update('service_requests', r.id, { status: 'Dispatched', wr_id: wr.id, assigned_team: vals.work_team });
+            UI.toast(`Dispatched to Work Request #${wr.id}`);
+            close();
+            g.refresh();
+          }
+        }]);
+      }},
+      { label: 'Reject', show: (r) => ['Requested', 'In Triage'].includes(r.status), onClick: (r, ctx, g) => {
+        const reason = prompt('Rejection reason:');
+        if (reason) {
+          DB.update('service_requests', r.id, { status: 'Rejected', rejection_reason: reason });
+          UI.toast('Request rejected');
+          g.refresh();
+        }
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['eng-assign'] = {
+    type: 'grid', title: 'Assign Work Orders to Contractor', gridTitle: 'Unassigned Work Requests', table: 'wr',
+    where: (r) => ['Requested', 'Approved'].includes(r.status) && r.wr_type === 'On Demand',
+    filters: [
+      fS('prob_type', 'Trade / Problem Type', tradeOpts),
+      fS('bl_id', 'Building Code', bldOpts),
+      fS('priority', 'Priority', PRIO)
+    ],
+    columns: [
+      { field: 'id', label: 'WR Code' },
+      { field: 'date_requested', label: 'Date Requested', type: 'date' },
+      { field: 'site_id', label: 'Site Code' },
+      { field: 'bl_id', label: 'Building Code' },
+      { field: 'prob_type', label: 'Problem Type' },
+      { field: 'description', label: 'Description' },
+      { field: 'priority', label: 'Priority', type: 'number' },
+      { field: 'status', label: 'Status', type: 'status' },
+      { field: 'work_team', label: 'Work Team' },
+      { field: 'date_agreed_target', label: 'Agreed Target', type: 'date' }
+    ],
+    sort: { field: 'date_requested', dir: 'desc' },
+    rowActions: [
+      { label: 'Assign & Issue', cls: 'primary', onClick: (r, ctx, g) => {
+        const cOpts = () => DB.all('craftspersons').map(c => c.name);
+        const f = UI.buildForm([{ title: 'Assign Contractor Work Order', fields: [
+          fld('work_team', 'Work Team', 'select', { options: teamOpts, default: r.work_team || '', required: true }),
+          fld('craftsperson', 'Assigned Craftsperson', 'select', { options: cOpts }),
+          fld('date_agreed_target', 'Agreed Target Date', 'date', { default: r.date_agreed_target || new Date(Date.now() + 3*DAY).toISOString().slice(0, 10), required: true })
+        ]}], null, {});
+        UI.modal('Assign WR #' + r.id, f, [{
+          label: 'Issue Work Order', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = f.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            DB.update('wr', r.id, {
+              status: 'Issued and In Process',
+              work_team: vals.work_team,
+              craftsperson: vals.craftsperson || '',
+              date_assigned: nowIso(),
+              date_agreed_target: vals.date_agreed_target
+            });
+            UI.toast('Work Request #' + r.id + ' Issued to ' + vals.work_team);
+            close();
+            g.refresh();
+          }
+        }]);
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['ptw-authority'] = {
+    type: 'grid', title: 'Permit to Work Authority Console', gridTitle: 'Permits Awaiting Authorization & Issuance', table: 'ptw',
+    where: (r) => ['Applied', 'Authorized', 'Waiting For Re Issuing'].includes(r.status),
+    rowClass: ptwRowClass,
+    legend: '<div class="legend" style="padding:10px 16px;background:var(--panel-head);border-bottom:1px solid var(--line);font-size:12.5px"><b>Enterprise PTW Workflow:</b> <span class="badge warn">Applied</span> &rarr; Click <b>Authorize (AUT)</b> &rarr; <span class="badge info">Authorized</span> &rarr; Click <b>Issue (I)</b> &rarr; Active on Site.</div>',
+    filters: [
+      fS('status', 'Status', ['Applied', 'Authorized', 'Waiting For Re Issuing']),
+      fS('permit_type', 'Permit Type', ['HOT WORK', 'CONFINED SPACE', 'WORK AT HEIGHT', 'ELECTRICAL WORK', 'EXCAVATION', 'GENERAL HAZARDOUS']),
+      fS('bl_id', 'Building Code', bldOpts)
+    ],
+    columns: [
+      { field: 'id', label: 'PTW Code' },
+      { field: 'wr_id', label: 'Work Request' },
+      { field: 'site_id', label: 'Site Code' },
+      { field: 'bl_id', label: 'Building Code' },
+      { field: 'permit_type', label: 'Permit Type' },
+      { field: 'date_start', label: 'Valid From', type: 'datetime' },
+      { field: 'date_upto', label: 'Valid Until', type: 'datetime' },
+      { field: 'safety_measures', label: 'Safety Measures' },
+      { field: 'status', label: 'Status', type: 'status' }
+    ],
+    sort: { field: 'id', dir: 'desc' },
+    rowActions: [
+      { label: 'Authorize (AUT)', show: (r) => r.status === 'Applied', cls: 'primary', onClick: (r, ctx, g) => {
+        if (confirm('Authorize Permit #' + r.id + ' as Safety Authority?')) {
+          DB.update('ptw', r.id, { status: 'Authorized', authorized_by: me().name || 'Safety Authority', date_authorized: nowIso() });
+          UI.toast('Permit #' + r.id + ' Authorized');
+          g.refresh();
+        }
+      }},
+      { label: 'Issue Permit (I)', show: (r) => r.status === 'Authorized', cls: 'primary', onClick: (r, ctx, g) => {
+        if (confirm('Issue Permit #' + r.id + ' to contractor team?')) {
+          DB.update('ptw', r.id, { status: 'Issued', issued_by: me().name || 'Safety Authority', date_issued: nowIso() });
+          UI.toast('Permit #' + r.id + ' Issued and active');
+          g.refresh();
+        }
+      }},
+      { label: 'Approve Re-Issue', show: (r) => r.status === 'Waiting For Re Issuing', onClick: (r, ctx, g) => {
+        if (confirm('Approve Re-Issuance for Permit #' + r.id + '?')) {
+          DB.update('ptw', r.id, { status: 'Re Issued', date_reissued: nowIso() });
+          UI.toast('Permit #' + r.id + ' Re-Issued');
+          g.refresh();
+        }
+      }},
+      { label: 'Reject', onClick: (r, ctx, g) => {
+        const reason = prompt('Rejection reason:');
+        if (reason) {
+          DB.update('ptw', r.id, { status: 'Rejected', rejection_reason: reason });
+          UI.toast('Permit #' + r.id + ' Rejected');
+          g.refresh();
+        }
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['eng-signoff'] = {
+    type: 'grid', title: 'Work Order Sign-off & Handover', gridTitle: 'Contractor Completed Work Orders', table: 'wr',
+    where: (r) => r.status === 'Contractor Completed',
+    filters: [
+      fS('prob_type', 'Problem Type', tradeOpts),
+      fS('bl_id', 'Building Code', bldOpts),
+      fT('work_team', 'Work Team')
+    ],
+    columns: [
+      { field: 'id', label: 'WR Code' },
+      { field: 'bl_id', label: 'Building Code' },
+      { field: 'prob_type', label: 'Trade' },
+      { field: 'description', label: 'Description' },
+      { field: 'work_team', label: 'Work Team' },
+      { field: 'date_contractor_completed', label: 'Contractor Done Date', type: 'date' },
+      { field: 'act_hours', label: 'Actual Hours', type: 'number' },
+      { field: 'act_cost', label: 'Actual Cost (QAR)', type: 'money' },
+      { field: 'completion_feedback', label: 'Contractor Notes' },
+      { field: 'status', label: 'Status', type: 'status' }
+    ],
+    sort: { field: 'date_contractor_completed', dir: 'desc' },
+    rowActions: [
+      { label: 'Sign-off (Complete)', cls: 'primary', onClick: (r, ctx, g) => {
+        if (confirm('Sign off and mark Work Request #' + r.id + ' as Completed?')) {
+          DB.update('wr', r.id, { status: 'Completed', date_completed: nowIso(), engineer_signoff: me().name });
+          const allSrs = DB.all('service_requests');
+          const matchedSr = allSrs.find(s => String(s.wr_id) === String(r.id));
+          if (matchedSr) DB.update('service_requests', matchedSr.id, { status: 'Completed' });
+          UI.toast('Work Request #' + r.id + ' signed off and Completed');
+          g.refresh();
+        }
+      }},
+      { label: 'Final Close (Archibus)', onClick: (r, ctx, g) => {
+        if (confirm('Permanently close WR #' + r.id + ' in Archibus database?')) {
+          DB.update('wr', r.id, { status: 'Closed', date_closed: nowIso(), closed_by: me().name });
+          UI.toast('Work Request #' + r.id + ' Closed');
+          g.refresh();
+        }
+      }},
+      { label: 'Return for Rework', onClick: (r, ctx, g) => {
+        const notes = prompt('Punchlist / Rework instructions:');
+        if (notes) {
+          DB.update('wr', r.id, { status: 'Issued and In Process', rework_reason: notes });
+          UI.toast('Work Request #' + r.id + ' returned to contractor');
+          g.refresh();
+        }
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  /* =====================================================================
+   * FINANCE & CONTRACTS
+   * ===================================================================== */
+  V['wcc-create'] = {
+    type: 'custom', title: 'Generate Work Confirmation Certificates', render(root, ctx) {
+      const completedWrs = DB.all('wr').filter(w => ['Completed', 'Closed'].includes(w.status)).slice(0, 40);
+      const bpas = DB.all('bpa_contracts');
+
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Batch Work Confirmation Certificate (WCC) Generator</span>
+            <span class="sp"></span>
+            <button class="btn primary" data-gen>Generate WCC for Selected WRs</button>
+          </div>
+          <div style="padding:12px 16px;background:var(--panel-head);border-bottom:1px solid var(--line);font-size:12.5px;color:var(--text-2)">
+            Select completed contractor work orders below to compile into an official Work Confirmation Certificate (Service Entry Sheet) for Finance review and Oracle Fusion ERP billing.
+          </div>
+          <div class="grid-wrap" style="max-height:480px;overflow:auto">
+            <table class="grid">
+              <thead><tr>
+                <th style="width:40px"><input type="checkbox" data-chk-all checked></th>
+                <th>WR Code</th><th>Building</th><th>Trade</th><th>Date Completed</th><th>Hours</th><th>Actual Cost (QAR)</th><th>Work Team</th>
+              </tr></thead>
+              <tbody data-tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>`);
+
+      const tbody = wrap.querySelector('[data-tbody]');
+      if (!completedWrs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="noresults">No completed work requests available for WCC billing.</td></tr>';
+      } else {
+        completedWrs.forEach((w) => {
+          const cost = w.act_cost || w.est_cost || 450;
+          const tr = UI.h(`<tr>
+            <td><input type="checkbox" data-wr-id="${esc(w.id)}" data-cost="${cost}" checked></td>
+            <td><b>${esc(w.id)}</b></td>
+            <td>${esc(w.bl_id)}</td>
+            <td>${esc(w.prob_type)}</td>
+            <td>${esc(UI.fmtDate(w.date_completed || w.date_contractor_completed))}</td>
+            <td>${esc(w.act_hours || 4)} hrs</td>
+            <td><b>${esc(UI.fmtNum(cost, 2))}</b></td>
+            <td>${esc(w.work_team || 'Contractor')}</td>
+          </tr>`);
+          tbody.appendChild(tr);
+        });
+      }
+
+      const chkAll = wrap.querySelector('[data-chk-all]');
+      chkAll.onchange = () => {
+        tbody.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = chkAll.checked; });
+      };
+
+      wrap.querySelector('[data-gen]').onclick = () => {
+        const checked = [...tbody.querySelectorAll('input[data-wr-id]:checked')];
+        if (!checked.length) return UI.toast('Please select at least one Work Request.', true);
+
+        const wrIds = checked.map(c => c.getAttribute('data-wr-id'));
+        const totalSum = checked.reduce((acc, c) => acc + Number(c.getAttribute('data-cost') || 0), 0);
+
+        const bpaOpts = bpas.map(b => `${b.bpa_number} - ${b.title}`);
+        const f = UI.buildForm([
+          { title: 'WCC Details', fields: [
+            fld('bpa_contract', 'Blanket Purchase Agreement', 'select', { options: bpaOpts, required: true, default: bpaOpts[0] }),
+            fld('title', 'Certificate Title', 'text', { default: `Monthly Maintenance Sign-off - ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, required: true }),
+            fld('period_start', 'Period Start Date', 'date', { default: '2026-10-01', required: true }),
+            fld('period_end', 'Period End Date', 'date', { default: '2026-10-31', required: true }),
+            fld('total_amount', 'Total Amount (QAR)', 'readonly', { default: UI.fmtNum(totalSum, 2) })
+          ]}
+        ], null, {});
+
+        UI.modal('Create Work Confirmation Certificate', f, [{
+          label: 'Submit Certificate', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = f.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            const count = DB.all('wcc').length + 1;
+            const bpaNum = vals.bpa_contract.split(' - ')[0];
+            const newWcc = DB.insert('wcc', {
+              wcc_number: 'WCC-2026-' + String(100 + count),
+              contractor: 'SONU Contracting Services',
+              bpa_number: bpaNum,
+              title: vals.title,
+              period_start: vals.period_start,
+              period_end: vals.period_end,
+              wr_count: wrIds.length,
+              wr_codes: wrIds.join(', '),
+              total_amount: totalSum,
+              status: 'Submitted',
+              submitted_date: nowIso()
+            });
+            UI.toast(`Certificate ${newWcc.wcc_number} submitted to Facilities Engineer!`);
+            close();
+            ctx.open('wcc-review');
+          }
+        }]);
+      };
+
+      root.appendChild(wrap);
+    }
+  };
+
+  V['wcc-review'] = {
+    type: 'grid', title: 'Review & Approve WCCs', gridTitle: 'Work Confirmation Certificates (WCC)', table: 'wcc',
+    filters: [
+      fS('status', 'Status', ['Draft', 'Submitted', 'Approved by Engineer', 'Verified by Finance']),
+      fS('bpa_number', 'BPA Agreement', () => DB.all('bpa_contracts').map(b => b.bpa_number))
+    ],
+    columns: [
+      { field: 'wcc_number', label: 'Certificate No' },
+      { field: 'bpa_number', label: 'BPA Agreement' },
+      { field: 'title', label: 'Title / Description' },
+      { field: 'contractor', label: 'Contractor' },
+      { field: 'period_start', label: 'Period Start', type: 'date' },
+      { field: 'period_end', label: 'Period End', type: 'date' },
+      { field: 'wr_count', label: 'WR Count', type: 'number' },
+      { field: 'total_amount', label: 'Total Amount (QAR)', type: 'money' },
+      { field: 'status', label: 'Status', type: 'status' },
+      { field: 'engineer_approved_by', label: 'Engineer Approval' },
+      { field: 'finance_verified_by', label: 'Finance Verified' },
+      { field: 'erp_ses_number', label: 'ERP SES Ref' }
+    ],
+    sort: { field: 'id', dir: 'desc' },
+    rowActions: [
+      { label: 'Approve (Engineer)', show: (r) => r.status === 'Submitted', cls: 'primary', onClick: (r, ctx, g) => {
+        if (confirm('Approve WCC ' + r.wcc_number + ' as Facilities Engineer?')) {
+          DB.update('wcc', r.id, { status: 'Approved by Engineer', engineer_approved_by: me().name || 'Facilities Engineer' });
+          UI.toast('WCC ' + r.wcc_number + ' approved and forwarded to Finance');
+          g.refresh();
+        }
+      }},
+      { label: 'Verify for ERP (SES)', show: (r) => r.status === 'Approved by Engineer', cls: 'primary', onClick: (r, ctx, g) => {
+        if (confirm('Verify WCC ' + r.wcc_number + ' and generate Oracle Fusion SES entry?')) {
+          const sesNo = 'SES-' + (840000 + Math.floor(Math.random() * 99999));
+          DB.update('wcc', r.id, { status: 'Verified by Finance', finance_verified_by: me().name || 'Finance Controller', erp_ses_number: sesNo });
+          UI.toast(`WCC Verified & Service Entry Sheet ${sesNo} created in Oracle Fusion`);
+          g.refresh();
+        }
+      }},
+      { label: 'View Line WRs', onClick: (r) => {
+        UI.modal('Work Requests in ' + r.wcc_number, UI.h(`<div style="padding:16px">
+          <p><b>Certificate:</b> ${esc(r.wcc_number)} &bull; <b>Total:</b> QAR ${esc(UI.fmtNum(r.total_amount, 2))}</p>
+          <p><b>Included WR Codes:</b></p>
+          <div style="background:var(--bg);padding:12px;border-radius:6px;word-break:break-all;font-family:monospace">${esc(r.wr_codes || 'None recorded')}</div>
+        </div>`));
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['finance-invoices'] = {
+    type: 'grid', title: 'Contractor Invoices Console', gridTitle: 'Contractor Invoices & ERP Reconciliation', table: 'invoices',
+    filters: [
+      fS('status', 'Invoice Status', ['Draft', 'Submitted', 'Approved', 'Paid']),
+      fS('bpa_number', 'BPA Agreement', () => DB.all('bpa_contracts').map(b => b.bpa_number)),
+      fYN('paid', 'Paid', r => r.paid)
+    ],
+    columns: [
+      { field: 'invoice_no', label: 'Invoice Number' },
+      { field: 'invoice_date', label: 'Invoice Date', type: 'date' },
+      { field: 'release_order', label: 'Release Order (RO)' },
+      { field: 'ro_date', label: 'RO Date', type: 'date' },
+      { field: 'bpa_number', label: 'BPA Number' },
+      { field: 'group_code', label: 'Cost Group' },
+      { field: 'invoice_amount', label: 'Amount (QAR)', type: 'money' },
+      { field: 'status', label: 'Status', type: 'status' },
+      { field: 'paid', label: 'Paid', type: 'bool' }
+    ],
+    sort: { field: 'id', dir: 'desc' },
+    toolbar: [
+      { label: 'Record New Invoice', cls: 'primary', onClick: (ctx, g) => {
+        const bpaOpts = DB.all('bpa_contracts').map(b => b.bpa_number);
+        const f = UI.buildForm([{ title: 'Invoice Information', fields: [
+          fld('invoice_no', 'Invoice Number', 'text', { default: 'SINV-' + Math.floor(Math.random() * 89999 + 10000), required: true }),
+          fld('invoice_date', 'Invoice Date', 'date', { default: new Date().toISOString().slice(0, 10), required: true }),
+          fld('bpa_number', 'BPA Number', 'select', { options: bpaOpts, required: true, default: bpaOpts[0] }),
+          fld('release_order', 'Release Order (RO)', 'text', { default: 'RO-' + Math.floor(Math.random() * 89999 + 200000), required: true }),
+          fld('invoice_amount', 'Invoice Amount (QAR)', 'number', { required: true }),
+          fld('group_code', 'Cost Group', 'text', { default: 'GRP-01' })
+        ]}], null, {});
+        UI.modal('Record Contractor Invoice', f, [{
+          label: 'Save Invoice', cls: 'primary', onClick: (close) => {
+            const { vals, missing } = f.read();
+            if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+            DB.insert('invoices', {
+              invoice_no: vals.invoice_no,
+              invoice_date: vals.invoice_date,
+              bpa_number: vals.bpa_number,
+              release_order: vals.release_order,
+              ro_date: vals.invoice_date,
+              invoice_amount: Number(vals.invoice_amount),
+              ro_amount: Number(vals.invoice_amount),
+              group_code: vals.group_code || 'GRP-01',
+              status: 'Submitted',
+              paid: false
+            });
+            UI.toast('Invoice ' + vals.invoice_no + ' recorded');
+            close();
+            g.refresh();
+          }
+        }]);
+      }}
+    ],
+    rowActions: [
+      { label: 'Approve Invoice', show: (r) => ['Draft', 'Submitted'].includes(r.status), onClick: (r, ctx, g) => {
+        DB.update('invoices', r.id, { status: 'Approved' });
+        UI.toast('Invoice ' + r.invoice_no + ' approved');
+        g.refresh();
+      }},
+      { label: 'Mark as Paid', show: (r) => !r.paid, cls: 'green', onClick: (r, ctx, g) => {
+        DB.update('invoices', r.id, { paid: true, status: 'Paid', date_paid: nowIso() });
+        UI.toast('Invoice ' + r.invoice_no + ' marked as Paid');
+        g.refresh();
+      }},
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['bpa-po-tracking'] = {
+    type: 'custom', title: 'BPA & PO Budget Tracking', render(root, ctx) {
+      const bpas = DB.all('bpa_contracts');
+      const totalBudget = sum(bpas, r => r.total_budget);
+      const totalCommitted = sum(bpas, r => r.committed_amount);
+      const totalInvoiced = sum(bpas, r => r.invoiced_amount);
+      const totalRemaining = sum(bpas, r => r.remaining_budget);
+
+      const wrap = UI.h(`<div>
+        <div class="kpis">
+          <div class="kpi"><b>QAR ${esc(UI.fmtNum(totalBudget, 0))}</b><span>Total Blanket Budget</span></div>
+          <div class="kpi"><b>QAR ${esc(UI.fmtNum(totalCommitted, 0))}</b><span>Committed POs</span></div>
+          <div class="kpi"><b>QAR ${esc(UI.fmtNum(totalInvoiced, 0))}</b><span>Invoiced & Paid</span></div>
+          <div class="kpi"><b style="color:var(--ok)">QAR ${esc(UI.fmtNum(totalRemaining, 0))}</b><span>Available Balance</span></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Blanket Purchase Agreements & Spend Tracking</span>
+            <span class="sp"></span>
+            <div style="font-size:12px;color:var(--muted);display:flex;gap:12px;align-items:center">
+              <span><span class="bpa-legend-dot" style="background:var(--brand)"></span>Invoiced</span>
+              <span><span class="bpa-legend-dot" style="background:var(--accent)"></span>Committed</span>
+              <span><span class="bpa-legend-dot" style="background:var(--line-strong)"></span>Remaining</span>
+            </div>
+          </div>
+          <div style="padding:16px" data-bpa-list></div>
+        </div>
+      </div>`);
+
+      const listContainer = wrap.querySelector('[data-bpa-list]');
+      bpas.forEach((b) => {
+        const invPct = Math.round((b.invoiced_amount / b.total_budget) * 100);
+        const comPct = Math.round(((b.committed_amount - b.invoiced_amount) / b.total_budget) * 100);
+        const remPct = Math.max(0, 100 - invPct - comPct);
+
+        const card = UI.h(`<div class="bpa-progress-box">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>
+              <b style="font-size:15px;color:var(--text)">${esc(b.bpa_number)} &mdash; ${esc(b.title)}</b>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">Vendor: <b>${esc(b.vendor)}</b> &bull; Validity: ${esc(b.start_date)} to ${esc(b.end_date)}</div>
+            </div>
+            <span class="badge ${b.status === 'Active' ? 'ok' : 'info'}">${esc(b.status)}</span>
+          </div>
+
+          <div class="bpa-progress-track">
+            <div class="bpa-bar-invoiced" style="width:${invPct}%" title="Invoiced: ${invPct}%"></div>
+            <div class="bpa-bar-committed" style="width:${comPct}%" title="Committed: ${comPct}%"></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;font-size:12.5px;padding-top:6px">
+            <div><span style="color:var(--muted)">Total Budget:</span><br><b>QAR ${esc(UI.fmtNum(b.total_budget, 0))}</b></div>
+            <div><span style="color:var(--muted)">Committed:</span><br><b style="color:var(--accent-dark)">QAR ${esc(UI.fmtNum(b.committed_amount, 0))}</b></div>
+            <div><span style="color:var(--muted)">Invoiced / Paid:</span><br><b style="color:var(--brand)">QAR ${esc(UI.fmtNum(b.invoiced_amount, 0))} (${invPct}%)</b></div>
+            <div><span style="color:var(--muted)">Remaining Balance:</span><br><b style="color:var(--ok)">QAR ${esc(UI.fmtNum(b.remaining_budget, 0))}</b></div>
+          </div>
+        </div>`);
+        listContainer.appendChild(card);
+      });
+
+      root.appendChild(wrap);
+    }
+  };
+
+  /* =====================================================================
+   * SPACE & CAMPUS MANAGEMENT
+   * ===================================================================== */
+  function bookRoomDirectModal(rm, ctx) {
+    const f = UI.buildForm([
+      { title: 'Room Booking', fields: [
+        fld('room', 'Selected Room', 'readonly', { default: `${rm.name} (${rm.room_code})` }),
+        fld('date', 'Booking Date', 'date', { default: new Date().toISOString().slice(0, 10), required: true }),
+        fld('start', 'Start Time', 'select', { options: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'], default: '09:00', required: true }),
+        fld('end', 'End Time', 'select', { options: ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'], default: '10:00', required: true }),
+        fld('purpose', 'Meeting Purpose', 'textarea', { required: true })
+      ]}
+    ], null, {});
+    UI.modal('Book ' + rm.name, f, [{
+      label: 'Confirm Booking', cls: 'primary', onClick: (close) => {
+        const { vals, missing } = f.read();
+        if (missing.length) return UI.toast('Please fill: ' + missing.join(', '), true);
+        DB.insert('bookings', {
+          bl_id: rm.bl_id,
+          room: `${rm.name} (${rm.room_code})`,
+          date: vals.date,
+          start: vals.start,
+          end: vals.end,
+          purpose: vals.purpose,
+          booked_by: me().name || 'Aya Mansoor'
+        });
+        UI.toast('Room booked successfully!');
+        close();
+        if (ctx && ctx.open) ctx.open('my-reservations');
+      }
+    }]);
+  }
+
+  V['space-floor-plans'] = {
+    type: 'custom', title: 'Interactive Floor Plan Viewer', render(root, ctx) {
+      const allRooms = DB.all('rooms');
+      const bldList = [...new Set(allRooms.map(r => r.bl_id))];
+
+      const wrap = UI.h(`<div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="ttl">Campus Architectural CAD Viewer</span>
+            <span class="sp"></span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select data-bl style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--line-strong)">${bldList.map(b => `<option value="${b}">${b} - ${b === 'LA' ? 'Liberal Arts' : (b === 'RC' ? 'Research Complex' : b)}</option>`).join('')}</select>
+              <select data-fl style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--line-strong)"><option value="GF">Ground Floor (GF)</option><option value="L1">Level 1 (L1)</option><option value="L2">Level 2 (L2)</option></select>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--panel-head);border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;gap:14px;align-items:center">
+              <span><span class="bpa-legend-dot" style="background:#2563eb"></span>Meeting / Boardroom</span>
+              <span><span class="bpa-legend-dot" style="background:#0d9488"></span>Lab / Seminar</span>
+              <span><span class="bpa-legend-dot" style="background:#f59e0b"></span>Quiet Focus / Office</span>
+              <span><span class="bpa-legend-dot" style="background:#475569"></span>Circulation & Core</span>
+            </div>
+            <div style="color:var(--muted)">Click any room polygon on the blueprint to view room details or reserve.</div>
+          </div>
+
+          <div class="floorplan-wrap">
+            <svg class="floorplan-svg" viewBox="0 0 940 480" width="100%" height="440" style="max-width:920px;display:block;margin:0 auto">
+              <rect x="20" y="20" width="900" height="440" rx="8" fill="#1e293b" stroke="#334155" stroke-width="4"/>
+              <rect x="30" y="210" width="880" height="60" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+              <text x="470" y="245" fill="#64748b" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="4">MAIN CAMPUS CIRCULATION CORRIDOR</text>
+
+              <g class="floorplan-room" data-code="01" data-type="Executive Boardroom" data-cap="20" data-area="52">
+                <rect x="40" y="40" width="160" height="150" rx="4" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5"/>
+                <text x="120" y="100" fill="#93c5fd" font-size="13" font-weight="700" text-anchor="middle">GF-101</text>
+                <text x="120" y="122" fill="#bfdbfe" font-size="10.5" text-anchor="middle">Executive Boardroom</text>
+                <text x="120" y="142" fill="#60a5fa" font-size="10" text-anchor="middle">Cap: 20 &bull; 52m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="02" data-type="Meeting Room" data-cap="8" data-area="26">
+                <rect x="220" y="40" width="140" height="150" rx="4" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5"/>
+                <text x="290" y="100" fill="#93c5fd" font-size="13" font-weight="700" text-anchor="middle">GF-102</text>
+                <text x="290" y="122" fill="#bfdbfe" font-size="10.5" text-anchor="middle">Meeting Room A</text>
+                <text x="290" y="142" fill="#60a5fa" font-size="10" text-anchor="middle">Cap: 8 &bull; 26m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="03" data-type="Computer Lab" data-cap="24" data-area="68">
+                <rect x="380" y="40" width="180" height="150" rx="4" fill="#115e59" stroke="#14b8a6" stroke-width="1.5"/>
+                <text x="470" y="100" fill="#5eead4" font-size="13" font-weight="700" text-anchor="middle">GF-103</text>
+                <text x="470" y="122" fill="#99f6e4" font-size="10.5" text-anchor="middle">Advanced Computing Lab</text>
+                <text x="470" y="142" fill="#2dd4bf" font-size="10" text-anchor="middle">Cap: 24 &bull; 68m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="04" data-type="Quiet Focus Room" data-cap="4" data-area="18">
+                <rect x="580" y="40" width="140" height="150" rx="4" fill="#78350f" stroke="#f59e0b" stroke-width="1.5"/>
+                <text x="650" y="100" fill="#fde68a" font-size="13" font-weight="700" text-anchor="middle">GF-104</text>
+                <text x="650" y="122" fill="#fef3c7" font-size="10.5" text-anchor="middle">Quiet Focus Pod</text>
+                <text x="650" y="142" fill="#fbbf24" font-size="10" text-anchor="middle">Cap: 4 &bull; 18m²</text>
+              </g>
+
+              <rect x="740" y="40" width="160" height="150" rx="4" fill="#334155" stroke="#475569" stroke-width="1.5"/>
+              <text x="820" y="105" fill="#cbd5e1" font-size="12" font-weight="600" text-anchor="middle">FACILITIES CORE</text>
+              <text x="820" y="125" fill="#94a3b8" font-size="10" text-anchor="middle">Restrooms & MEP</text>
+
+              <g class="floorplan-room" data-code="05" data-type="Conference Hall" data-cap="35" data-area="94">
+                <rect x="40" y="290" width="220" height="150" rx="4" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5"/>
+                <text x="150" y="350" fill="#93c5fd" font-size="13" font-weight="700" text-anchor="middle">GF-201</text>
+                <text x="150" y="372" fill="#bfdbfe" font-size="10.5" text-anchor="middle">Main Seminar Hall</text>
+                <text x="150" y="392" fill="#60a5fa" font-size="10" text-anchor="middle">Cap: 35 &bull; 94m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="06" data-type="Open Collab Space" data-cap="16" data-area="48">
+                <rect x="280" y="290" width="180" height="150" rx="4" fill="#115e59" stroke="#14b8a6" stroke-width="1.5"/>
+                <text x="370" y="350" fill="#5eead4" font-size="13" font-weight="700" text-anchor="middle">GF-202</text>
+                <text x="370" y="372" fill="#99f6e4" font-size="10.5" text-anchor="middle">Collaborative Lounge</text>
+                <text x="370" y="392" fill="#2dd4bf" font-size="10" text-anchor="middle">Cap: 16 &bull; 48m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="07" data-type="Meeting Room" data-cap="10" data-area="32">
+                <rect x="480" y="290" width="140" height="150" rx="4" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1.5"/>
+                <text x="550" y="350" fill="#93c5fd" font-size="13" font-weight="700" text-anchor="middle">GF-203</text>
+                <text x="550" y="372" fill="#bfdbfe" font-size="10.5" text-anchor="middle">Meeting Room B</text>
+                <text x="550" y="392" fill="#60a5fa" font-size="10" text-anchor="middle">Cap: 10 &bull; 32m²</text>
+              </g>
+
+              <g class="floorplan-room" data-code="08" data-type="Quiet Focus Room" data-cap="4" data-area="18">
+                <rect x="640" y="290" width="130" height="150" rx="4" fill="#78350f" stroke="#f59e0b" stroke-width="1.5"/>
+                <text x="705" y="350" fill="#fde68a" font-size="13" font-weight="700" text-anchor="middle">GF-204</text>
+                <text x="705" y="372" fill="#fef3c7" font-size="10.5" text-anchor="middle">Focus Booth B</text>
+                <text x="705" y="392" fill="#fbbf24" font-size="10" text-anchor="middle">Cap: 4 &bull; 18m²</text>
+              </g>
+
+              <rect x="790" y="290" width="110" height="150" rx="4" fill="#334155" stroke="#475569" stroke-width="1.5"/>
+              <text x="845" y="365" fill="#cbd5e1" font-size="12" font-weight="600" text-anchor="middle">ELEVATOR</text>
+              <text x="845" y="385" fill="#94a3b8" font-size="10" text-anchor="middle">Core Shaft</text>
+            </svg>
+          </div>
+        </div>
+      </div>`);
+
+      const svg = wrap.querySelector('.floorplan-svg');
+      svg.querySelectorAll('.floorplan-room').forEach((roomEl) => {
+        roomEl.onclick = () => {
+          const type = roomEl.getAttribute('data-type');
+          const cap = roomEl.getAttribute('data-cap');
+          const area = roomEl.getAttribute('data-area');
+          const textEl = roomEl.querySelector('text');
+          const code = textEl ? textEl.textContent : 'Room';
+
+          const modalContent = UI.h(`<div style="padding:16px">
+            <div class="detail-grid" style="grid-template-columns:1fr;margin-bottom:16px">
+              <div><span>Room Code:</span><b>${esc(code)}</b></div>
+              <div><span>Room Type:</span><b>${esc(type)}</b></div>
+              <div><span>Capacity:</span><b>${esc(cap)} Persons</b></div>
+              <div><span>Floor Area:</span><b>${esc(area)} m²</b></div>
+              <div><span>Standard Equipment:</span><b>Video Conference Camera, Ultra-HD Screen, Digital Whiteboard</b></div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+              <button class="btn" data-sr-btn>Request Maintenance</button>
+              <button class="btn primary" data-book-btn>Reserve This Room</button>
+            </div>
+          </div>`);
+
+          const closeModal = UI.modal(`Room ${code} — ${type}`, modalContent);
+          modalContent.querySelector('[data-book-btn]').onclick = () => {
+            closeModal();
+            ctx.open('reserve-room');
+          };
+          modalContent.querySelector('[data-sr-btn]').onclick = () => {
+            closeModal();
+            ctx.open('sr-catalog');
+          };
+        };
+      });
+
+      root.appendChild(wrap);
+    }
+  };
+
+  V['space-room-directory'] = {
+    type: 'grid', title: 'Building & Room Directory', gridTitle: 'Campus Room Directory', table: 'rooms',
+    filters: [
+      fS('bl_id', 'Building Code', bldOpts),
+      fS('fl_id', 'Floor', ['GF', 'L1', 'L2']),
+      fS('rm_type', 'Room Type', ['Meeting Room', 'Executive Boardroom', 'Conference Hall', 'Quiet Focus Room', 'Computer Lab', 'Open Collab Space']),
+      fT('department', 'Department')
+    ],
+    columns: [
+      { field: 'id', label: 'Room ID' },
+      { field: 'bl_name', label: 'Building Name' },
+      { field: 'fl_id', label: 'Floor' },
+      { field: 'room_code', label: 'Room Code' },
+      { field: 'name', label: 'Room Name' },
+      { field: 'rm_type', label: 'Room Type' },
+      { field: 'capacity', label: 'Capacity', type: 'number' },
+      { field: 'area_sqm', label: 'Area (m²)', type: 'number' },
+      { field: 'department', label: 'Department' },
+      { field: 'amenities', label: 'Amenities' },
+      { field: 'status', label: 'Status', type: 'status' }
+    ],
+    sort: { field: 'id', dir: 'asc' },
+    rowActions: [
+      { label: 'Book Room', cls: 'primary', onClick: (r, ctx) => bookRoomDirectModal(r, ctx) },
+      { label: 'Details', details: true }
+    ]
+  };
+
+  V['space-department-alloc'] = {
+    type: 'grid', title: 'Department Space Allocation', gridTitle: 'Department Headcount & Area Allocation', table: 'space_allocations',
+    filters: [
+      fT('division_name', 'Division'),
+      fT('department_name', 'Department'),
+      fS('bl_id', 'Building Code', bldOpts)
+    ],
+    columns: [
+      { field: 'division_name', label: 'Division' },
+      { field: 'department_name', label: 'Department' },
+      { field: 'bl_name', label: 'Building Name' },
+      { field: 'headcount', label: 'Headcount', type: 'number' },
+      { field: 'allocated_area_sqm', label: 'Allocated Area (m²)', type: 'number' },
+      { field: 'density_sqm_per_person', label: 'Density (m²/seat)', type: 'number' },
+      { field: 'target_density', label: 'Target Density', type: 'number' },
+      { field: 'occupancy_rate_pct', label: 'Occupancy Rate (%)', type: 'number' },
+      { field: 'variance', label: 'Variance' }
+    ],
+    sort: { field: 'id', dir: 'asc' },
+    rowActions: [{ label: 'Details', details: true }]
+  };
+
+  V['space-utilization-kpis'] = {
+    type: 'custom', title: 'Space Utilization & Density KPIs', render(root, ctx) {
+      const allocs = DB.all('space_allocations');
+      const totalArea = sum(allocs, r => r.allocated_area_sqm);
+      const totalHeadcount = sum(allocs, r => r.headcount);
+      const avgDensity = totalHeadcount ? (totalArea / totalHeadcount).toFixed(1) : 0;
+      const avgOccupancy = allocs.length ? +(allocs.reduce((a, r) => a + (r.occupancy_rate_pct || 80), 0) / allocs.length).toFixed(1) : 84.5;
+
+      const wrap = UI.h(`<div>
+        <div class="kpis">
+          <div class="kpi"><b>${esc(UI.fmtNum(totalArea, 0))} m²</b><span>Total Allocated Area</span></div>
+          <div class="kpi"><b>${esc(UI.fmtNum(totalHeadcount, 0))}</b><span>Assigned Headcount</span></div>
+          <div class="kpi"><b>${esc(avgDensity)} m²</b><span>Avg Density per Seat</span></div>
+          <div class="kpi"><b style="color:var(--ok)">${esc(avgOccupancy)}%</b><span>Average Occupancy Rate</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:16px;margin-top:16px">
+          <div class="panel" style="margin:0">
+            <div class="panel-head"><span class="ttl">Area Allocation by Department</span></div>
+            <div class="chart-box" style="height:280px"><canvas data-c1></canvas></div>
+          </div>
+
+          <div class="panel" style="margin:0">
+            <div class="panel-head"><span class="ttl">Headcount by Campus Building</span></div>
+            <div class="chart-box" style="height:280px"><canvas data-c2></canvas></div>
+          </div>
+        </div>
+      </div>`);
+
+      if (window.Chart) {
+        const c1 = wrap.querySelector('[data-c1]');
+        const c2 = wrap.querySelector('[data-c2]');
+
+        const byDept = {};
+        allocs.forEach(a => {
+          byDept[a.department_name] = (byDept[a.department_name] || 0) + a.allocated_area_sqm;
+        });
+        const deptLabels = Object.keys(byDept);
+        const deptValues = Object.values(byDept);
+
+        const byBld = {};
+        allocs.forEach(a => {
+          byBld[a.bl_id] = (byBld[a.bl_id] || 0) + a.headcount;
+        });
+        const bldLabels = Object.keys(byBld);
+        const bldValues = Object.values(byBld);
+
+        new window.Chart(c1, {
+          type: 'doughnut',
+          data: {
+            labels: deptLabels,
+            datasets: [{ data: deptValues, backgroundColor: ['#2563eb', '#0d9488', '#f59e0b', '#7c3aed', '#db2777', '#0891b2'] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        new window.Chart(c2, {
+          type: 'bar',
+          data: {
+            labels: bldLabels,
+            datasets: [{ label: 'Assigned Headcount', data: bldValues, backgroundColor: '#1d4ed8', borderRadius: 4 }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      }
+
+      root.appendChild(wrap);
+    }
+  };
 
   window.SONU_VIEWS = V;
 })();

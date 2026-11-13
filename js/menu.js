@@ -18,6 +18,37 @@ window.SONU_MENU = [
     ]
   },
   {
+    id: 'workplace-services', title: 'Workplace Services', icon: 'briefcase',
+    summary: 'Employee self-service requests catalog, request tracking and room/desk booking.',
+    processes: [
+      { id: 'service-catalog-proc', title: 'Service Catalog & Requests', tasks: [
+        { title: 'Create Service Request', view: 'sr-catalog' },
+        { title: 'My Service Requests', view: 'my-service-requests' },
+        { title: 'Service Request Tracking', view: 'sr-tracking' }
+      ]},
+      { id: 'reservations-proc', title: 'Reservations & Hoteling', tasks: [
+        { title: 'Reserve a Meeting Room', view: 'reserve-room' },
+        { title: 'Book a Desk (Hoteling)', view: 'reserve-desk' },
+        { title: 'My Reservations', view: 'my-reservations' }
+      ]}
+    ]
+  },
+  {
+    id: 'engineering-desk', title: 'Facilities Engineering', icon: 'clipboard',
+    summary: 'Authority review, request dispatching, PTW authorization and work order closure.',
+    processes: [
+      { id: 'dispatch-triage', title: 'Triage & Dispatch', tasks: [
+        { title: 'Service Request Triage Console', view: 'eng-triage' },
+        { title: 'Assign Work Orders to Contractor', view: 'eng-assign' }
+      ]},
+      { id: 'authority-approvals', title: 'Authority & Safety Approvals', tasks: [
+        { title: 'Permit to Work Authority Console', view: 'ptw-authority' },
+        { title: 'RFE & Financial Variation Approval', view: 'rfe-approval' },
+        { title: 'Work Order Sign-off & Handover', view: 'eng-signoff' }
+      ]}
+    ]
+  },
+  {
     id: 'corrective', title: 'Corrective Maintenance', icon: 'wrench',
     summary: 'On-demand work requests, estimations, permits to work and contractor reports.',
     processes: [
@@ -119,6 +150,34 @@ window.SONU_MENU = [
         { title: 'PTW Details', view: 'ptw-details-report' },
         { title: 'Checklist' },
         { title: 'Remove Error Docs', view: 'remove-error-docs' }
+      ]}
+    ]
+  },
+  {
+    id: 'finance-contracts', title: 'Finance & Contracts', icon: 'filetext',
+    summary: 'Work Confirmation Certificates (WCC), Blanket Purchase Agreements and contractor billing.',
+    processes: [
+      { id: 'wcc-proc', title: 'Work Confirmation (WCC)', tasks: [
+        { title: 'Generate Work Confirmation Certificates', view: 'wcc-create' },
+        { title: 'Review & Approve WCCs', view: 'wcc-review' }
+      ]},
+      { id: 'invoicing-proc', title: 'Contractor Invoicing & ERP', tasks: [
+        { title: 'Contractor Invoices Console', view: 'finance-invoices' },
+        { title: 'BPA & PO Budget Tracking', view: 'bpa-po-tracking' }
+      ]}
+    ]
+  },
+  {
+    id: 'space-management', title: 'Space & Campus', icon: 'map',
+    summary: 'Building floor plans, room inventory, department seat allocations and capacity analytics.',
+    processes: [
+      { id: 'floor-plans-proc', title: 'Campus & Floor Plans', tasks: [
+        { title: 'Interactive Floor Plan Viewer', view: 'space-floor-plans' },
+        { title: 'Building & Room Directory', view: 'space-room-directory' }
+      ]},
+      { id: 'occupancy-proc', title: 'Occupancy & Space Allocation', tasks: [
+        { title: 'Department Space Allocation', view: 'space-department-alloc' },
+        { title: 'Space Utilization & Density KPIs', view: 'space-utilization-kpis' }
       ]}
     ]
   },

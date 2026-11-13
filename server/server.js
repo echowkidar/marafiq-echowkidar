@@ -106,7 +106,7 @@ function seed() {
 }
 /* DATA_MODEL is bumped whenever the demo data structure changes. On start-up an older database gets fresh demo
    data (docs only) — user accounts, passwords and sessions are kept. */
-const DATA_MODEL = '2';
+const DATA_MODEL = '3';
 function setMeta(k, v) { db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(k, v); }
 function reseedDocs() {
   const D = buildSeed();
@@ -114,6 +114,16 @@ function reseedDocs() {
   try {
     db.exec('DELETE FROM docs;');
     for (const [tbl, rows] of Object.entries(D)) { if (tbl === 'users') continue; for (const r of rows) q.put.run(tbl, String(r.id), JSON.stringify(r)); }
+    for (const u of D.users) {
+      if (!q.userByName.get(u.username)) {
+        const nextId = (q.maxUserId.get().m || 0) + 1;
+        const salt = crypto.randomBytes(16).toString('hex');
+        const { password, ...profile } = u;
+        profile.id = nextId;
+        profile.active = true; profile.created_at = new Date().toISOString(); profile.last_login = null;
+        q.putUser.run(nextId, u.username, salt, hashPw(SEED_PASSWORD || password, salt), JSON.stringify(profile));
+      }
+    }
     setMeta('data_model', DATA_MODEL); db.exec('COMMIT');
     if (typeof TABLES !== 'undefined') q.tables.all().forEach((x) => TABLES.add(x.tbl));
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -137,7 +147,7 @@ function nextId(t, prefix = '') {
   const nums = q.ids.all(t).map((r) => numPart(r.id)).filter(Number.isFinite);
   return prefix + ((nums.length ? Math.max(...nums) : (BASE[t] || 1) - 1) + 1);
 }
-const ROLE_RANK = { Contractor: 1, Supervisor: 2, Administrator: 3 };
+const ROLE_RANK = { Employee: 1, Contractor: 1, Finance: 2, Supervisor: 2, Administrator: 3 };
 const atLeast = (user, role) => (ROLE_RANK[user.role] || 0) >= ROLE_RANK[role];
 
 const WR_STATUS = ['Requested', 'Reviewed but On Hold', 'Rejected', 'Approved', 'Assigned to Work Order', 'Issued and In Process', 'On Hold for Parts', 'On Hold for Access', 'On Hold for Labor', 'Not Handymen Work', 'Stopped', 'Cancelled', 'Completed', 'Closed', 'Contractor Completed'];
@@ -449,6 +459,55 @@ const ACTIONS = {
       const r = { ...p, [`approver${i}_status`]: decision, [`approver${i}_comm`]: String(b.comment || ''), [`approver${i}_date`]: now() };
       if (decision === 'Rejected') r.status = 'Rejected';
       else if (![1, 2, 3, 4].some((k) => r['approver' + k] && r[`approver${k}_status`] !== 'Approved')) { r.status = 'Approved'; r.date_approved = now(); }
+      return { row: r };
+    }
+  },
+  service_requests: {
+    triage(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only a supervisor/engineer can triage requests', 403);
+      const r = { ...p, status: 'In Triage', priority: b.priority || p.priority || '2', dispatched_to: b.dispatched_to || 'SONU Contracting Services' };
+      return { row: r };
+    },
+    dispatch(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only a supervisor/engineer can dispatch requests', 403);
+      const r = { ...p, status: 'Dispatched', dispatched_to: b.dispatched_to || 'SONU Contracting Services', target_completion: b.target_completion || p.target_completion };
+      return { row: r };
+    },
+    complete(p, b, u) {
+      const r = { ...p, status: 'Completed', date_completed: now() };
+      return { row: r };
+    },
+    rate(p, b, u) {
+      if (p.requestor_username && p.requestor_username !== u.username && !atLeast(u, 'Supervisor')) fail('You can only rate your own service requests', 403);
+      const rating = Number(b.rating);
+      if (!rating || rating < 1 || rating > 5) fail('Rating must be between 1 and 5 stars');
+      const r = { ...p, rating, feedback: String(b.feedback || '').trim() };
+      return { row: r };
+    }
+  },
+  wcc: {
+    submit(p, b, u) {
+      if (p.status !== 'Draft') fail('Only draft WCCs can be submitted', 409);
+      const r = { ...p, status: 'Submitted', submitted_by: u.name, date_submitted: now() };
+      return { row: r };
+    },
+    approve(p, b, u) {
+      if (!atLeast(u, 'Supervisor')) fail('Only a supervisor/engineer can approve WCCs', 403);
+      if (p.status !== 'Submitted') fail('Only submitted WCCs can be approved', 409);
+      const r = { ...p, status: 'Approved by Engineer', approved_by: u.name, date_approved: now() };
+      return { row: r };
+    },
+    verify(p, b, u) {
+      if (!atLeast(u, 'Finance') && !atLeast(u, 'Supervisor')) fail('Only finance can verify WCCs for ERP payment', 403);
+      const ses = b.erp_ses_number || 'SES-100' + String(p.id).padStart(3, '0');
+      const r = { ...p, status: 'Verified by Finance', verified_by: u.name, date_verified: now(), erp_ses_number: ses };
+      return { row: r };
+    }
+  },
+  desk_bookings: {
+    cancel(p, b, u) {
+      if (p.booked_by_username !== u.username && !atLeast(u, 'Supervisor')) fail('You can only cancel your own bookings', 403);
+      const r = { ...p, status: 'Cancelled' };
       return { row: r };
     }
   }

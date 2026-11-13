@@ -5,7 +5,7 @@
   const KEY = 'sonu_db_v1';
   const DAY = 864e5;
   const PREFIX = { ptw: 'C-' };
-  const BASE = { wr: 3374175, other_resources: 400000, incidents: 10001, invoices: 1, ptw: 831572 };
+  const BASE = { wr: 3374175, other_resources: 400000, incidents: 10001, invoices: 1, ptw: 831572, wcc: 7001, service_requests: 8001, desk_bookings: 101 };
 
   /* ===================================================== seed ===================================================== */
   function buildSeed() {
@@ -39,7 +39,9 @@
     D.users = [
       { id: 1, username: 'contractor', password: 'Sonu@123', name: 'Ravi Menon', position: 'Civil Technician', company: 'SONU Contracting Services', phone: '+974 5550 1101', email: 'ravi.menon@example.com', role: 'Contractor', bl_id: 'SNHQB02' },
       { id: 2, username: 'supervisor', password: 'Sonu@123', name: 'Nadia Farouk', position: 'Facilities Supervisor', company: 'SONU Facilities Management', phone: '+974 5550 1102', email: 'nadia.farouk@example.com', role: 'Supervisor', bl_id: 'SNHQB01' },
-      { id: 3, username: 'admin', password: 'Sonu@123', name: 'Omar Haddad', position: 'Portal Administrator', company: 'SONU Facilities Management', phone: '+974 5550 1103', email: 'omar.haddad@example.com', role: 'Administrator', bl_id: 'SNHQB01' }
+      { id: 3, username: 'admin', password: 'Sonu@123', name: 'Omar Haddad', position: 'Portal Administrator', company: 'SONU Facilities Management', phone: '+974 5550 1103', email: 'omar.haddad@example.com', role: 'Administrator', bl_id: 'SNHQB01' },
+      { id: 6, username: 'employee', password: 'Sonu@123', name: 'Aya Mansoor', position: 'Academic Coordinator', company: 'Qatar Foundation / SONU Academic City', phone: '+974 5550 1104', email: 'aya.mansoor@example.com', role: 'Employee', bl_id: 'SNACB01' },
+      { id: 7, username: 'finance', password: 'Sonu@123', name: 'Tariq Haddad', position: 'Contracts & Invoicing Specialist', company: 'SONU Finance Operations', phone: '+974 5550 1105', email: 'tariq.haddad@example.com', role: 'Finance', bl_id: 'SNHQB01' }
     ];
 
     /* ---- sites & buildings ---- */
@@ -396,6 +398,180 @@
       { id: 2, room: 'Meeting Room A', bl_id: 'SNHQB01', date: I(NOW + 2 * DAY), start: '14:00', end: '15:00', purpose: 'Safety briefing', booked_by: 'Nadia Farouk' },
       { id: 3, room: 'Training Room', bl_id: 'SNHQB05', date: I(NOW - 3 * DAY), start: '10:00', end: '12:00', purpose: 'Toolbox talk', booked_by: 'Omar Haddad' }
     ];
+
+    /* ---- Workplace Services: service_requests ---- */
+    D.service_requests = [];
+    const SRCAT = [
+      ['Temperature & HVAC', ['AC temperature too cold', 'AC unit making rattling noise', 'No airflow from diffuser', 'Thermostat screen unreadable']],
+      ['Cleaning & Janitorial', ['Spill in corridor requiring mop', 'Trash bin overflow in pantry', 'Window exterior cleaning requested', 'Restroom supplies replenishment']],
+      ['Keys & Access Cards', ['New staff access badge request', 'Office door lock cylinder jammed', 'Lost proximity card replacement', 'Visitor pass approval']],
+      ['Electrical & Lighting', ['Ceiling LED panel flickering', 'Pantry floor socket tripping', 'Desk lamp power outlet dead', 'Motion sensor switch not activating']],
+      ['Plumbing & Water', ['Pantry sink draining slowly', 'Water dispenser leaking cold water', 'Washroom faucet dripping', 'Low water pressure in Level 2 pantry']],
+      ['Furniture & Ergonomics', ['Ergonomic desk chair replacement', 'Additional white board installation', 'Filing cabinet lock repair', 'Meeting room table leg unstable']]
+    ];
+    for (let i = 0; i < 35; i++) {
+      const catPair = pick(SRCAT);
+      const cat = catPair[0];
+      const desc = pick(catPair[1]);
+      const b = bOf[pick(bldIds)];
+      const reqAge = ri(0, 45);
+      const reqDate = ago(reqAge);
+      let status = reqAge > 20 ? wp([['Completed', 7], ['Rejected', 1], ['In Progress', 2]]) : wp([['Requested', 4], ['In Triage', 3], ['Dispatched', 2], ['Completed', 1]]);
+      const prio = wp([['1', 1], ['2', 3], ['3', 5], ['4', 1]]);
+      const hasRating = status === 'Completed' && chance(0.7);
+      D.service_requests.push({
+        id: 8000 + i + 1,
+        req_code: 'SR-2026-' + pad(i + 101, 4),
+        requestor_name: i < 5 ? 'Aya Mansoor' : nm(),
+        requestor_username: i < 5 ? 'employee' : 'staff.' + (i + 1),
+        department: pick(['Academic Affairs', 'Student Services', 'Administration & Finance', 'Research Labs', 'Facilities Operations']),
+        category: cat,
+        description: desc,
+        site_id: b.site_id,
+        bl_id: b.id,
+        fl_id: pick(['GF', 'L1', 'L2']),
+        rm_id: 'Room ' + ri(101, 220),
+        priority: prio,
+        status: status,
+        date_requested: I(reqDate),
+        target_completion: I(reqDate + ri(1, 4) * DAY),
+        date_completed: status === 'Completed' ? I(reqDate + ri(1, 3) * DAY) : null,
+        rating: hasRating ? ri(3, 5) : null,
+        feedback: hasRating ? pick(['Fixed very quickly, thank you!', 'Great communication from technician.', 'Professional work done.', 'Satisfactory service.']) : '',
+        dispatched_to: status !== 'Requested' && status !== 'Rejected' ? 'SONU Contracting Services' : '',
+        linked_wr_id: status === 'Dispatched' || status === 'Completed' ? pick(D.wr).id : null
+      });
+    }
+
+    /* ---- Space & Campus: rooms & desks ---- */
+    D.rooms = [];
+    const RTYPES = [['Meeting Room', 8], ['Executive Boardroom', 20], ['Conference Hall', 35], ['Quiet Focus Room', 3], ['Computer Lab', 24], ['Open Collab Space', 12]];
+    let rmSeq = 1;
+    D.buildings.slice(0, 12).forEach((b) => {
+      ['GF', 'L1', 'L2'].forEach((fl) => {
+        for (let r = 1; r <= 3; r++) {
+          const rt = pick(RTYPES);
+          const rmid = b.id + '-' + fl + '-R' + pad(r, 2);
+          D.rooms.push({
+            id: rmid,
+            bl_id: b.id,
+            bl_name: b.name,
+            fl_id: fl,
+            room_code: fl + '-' + pad(r * 10 + 2, 3),
+            name: rt[0] + ' ' + fl + '.' + r,
+            rm_type: rt[0],
+            capacity: rt[1],
+            area_sqm: Math.round(rt[1] * (2.8 + rnd() * 1.4)),
+            department: pick(D.departments).name,
+            amenities: pick(['4K Display, VC, Whiteboard', 'Dual Screen, Polycom, Projector', 'Whiteboard, Screen Sharing', 'Standard Audio/Visual']),
+            status: chance(0.7) ? 'Available' : 'Occupied'
+          });
+        }
+      });
+    });
+
+    D.desks = [];
+    let deskSeq = 1;
+    D.buildings.slice(0, 6).forEach((b) => {
+      ['GF', 'L1'].forEach((fl) => {
+        for (let d = 1; d <= 4; d++) {
+          const did = 'DSK-' + b.id + '-' + fl + '-' + pad(d, 2);
+          D.desks.push({
+            id: did,
+            desk_code: 'Desk ' + fl + '.' + pad(d, 2),
+            bl_id: b.id,
+            bl_name: b.name,
+            fl_id: fl,
+            zone: 'Open Flex Zone ' + fl,
+            has_dual_monitor: chance(0.7),
+            has_docking_station: true,
+            status: chance(0.65) ? 'Available' : pick(['Reserved', 'Occupied'])
+          });
+        }
+      });
+    });
+
+    D.desk_bookings = [];
+    for (let i = 0; i < 12; i++) {
+      const d = pick(D.desks);
+      const bDate = NOW + ri(-3, 10) * DAY;
+      D.desk_bookings.push({
+        id: i + 1,
+        desk_id: d.id,
+        desk_code: d.desk_code,
+        bl_id: d.bl_id,
+        fl_id: d.fl_id,
+        date: I(bDate),
+        slot: pick(['Full Day (08:00 - 17:00)', 'Morning (08:00 - 12:30)', 'Afternoon (12:30 - 17:00)']),
+        booked_by: i < 3 ? 'Aya Mansoor' : nm(),
+        booked_by_username: i < 3 ? 'employee' : 'staff.' + (i + 1),
+        department: 'Academic Affairs',
+        status: bDate < NOW ? 'Completed' : chance(0.85) ? 'Confirmed' : 'Cancelled'
+      });
+    }
+
+    /* ---- Space: department allocations ---- */
+    D.space_allocations = [];
+    D.divisions.forEach((dv, dvi) => {
+      D.departments.filter((_, di) => di % 2 === dvi % 2).slice(0, 2).forEach((dp, dpi) => {
+        const b = pick(D.buildings);
+        const hc = ri(15, 65);
+        const area = Math.round(hc * ri(9, 14));
+        D.space_allocations.push({
+          id: D.space_allocations.length + 1,
+          division_id: dv.id,
+          division_name: dv.name,
+          department_id: dp.id,
+          department_name: dp.name,
+          site_id: b.site_id,
+          bl_id: b.id,
+          bl_name: b.name,
+          headcount: hc,
+          allocated_area_sqm: area,
+          density_sqm_per_person: +(area / hc).toFixed(1),
+          utilization_pct: ri(70, 96),
+          target_density: 12.0
+        });
+      });
+    });
+
+    /* ---- Finance & Procurement: BPA contracts & WCC certificates ---- */
+    D.bpa_contracts = [
+      { id: 1, bpa_number: 'BPA-26-001', title: 'Comprehensive Facilities Maintenance Agreement', vendor: 'SONU Contracting Services', total_budget: 2500000, committed_amount: 1450000, invoiced_amount: 1120000, remaining_budget: 1050000, start_date: '2026-01-01', end_date: '2026-12-31', status: 'Active' },
+      { id: 2, bpa_number: 'BPA-26-002', title: 'Chiller & HVAC Overhauls Blanket Order', vendor: 'SONU Contracting Services', total_budget: 1200000, committed_amount: 780000, invoiced_amount: 540000, remaining_budget: 420000, start_date: '2026-01-01', end_date: '2026-12-31', status: 'Active' },
+      { id: 3, bpa_number: 'BPA-26-003', title: 'Electrical Infrastructure & Fire Systems Support', vendor: 'SONU Contracting Services', total_budget: 950000, committed_amount: 420000, invoiced_amount: 310000, remaining_budget: 530000, start_date: '2026-03-01', end_date: '2027-02-28', status: 'Active' },
+      { id: 4, bpa_number: 'BPA-26-004', title: 'Civil Repairs, Roofing & Structural Works', vendor: 'SONU Contracting Services', total_budget: 800000, committed_amount: 310000, invoiced_amount: 195000, remaining_budget: 490000, start_date: '2026-04-01', end_date: '2027-03-31', status: 'Active' }
+    ];
+
+    D.wcc = [];
+    const doneWorkOrders = D.wr.filter((w) => ['Completed', 'Closed', 'Contractor Completed'].includes(w.status)).slice(0, 25);
+    for (let i = 0; i < 8; i++) {
+      const slice = doneWorkOrders.slice(i * 3, i * 3 + 3);
+      const totalAmt = slice.reduce((acc, w) => acc + (w.act_cost || w.est_cost || 450), 0) || 12500;
+      const bpa = pick(D.bpa_contracts);
+      const st = wp([['Approved by Engineer', 4], ['Verified by Finance', 2], ['Submitted', 2], ['Draft', 1]]);
+      D.wcc.push({
+        id: 7000 + i + 1,
+        wcc_number: 'WCC-2026-' + pad(i + 1, 3),
+        contractor: 'SONU Contracting Services',
+        bpa_number: bpa.bpa_number,
+        title: 'Monthly Service Entry Sheet - ' + bpa.title.split(' ')[0] + ' ' + (i + 1),
+        period_start: '2026-10-01',
+        period_end: '2026-10-31',
+        wr_count: slice.length || 3,
+        wr_codes: slice.map((w) => String(w.id)).join(', ') || '3374175, 3374180',
+        total_amount: totalAmt,
+        currency: 'QAR',
+        status: st,
+        submitted_by: 'Ravi Menon',
+        date_submitted: I(NOW - (25 - i * 2) * DAY),
+        approved_by: st !== 'Draft' && st !== 'Submitted' ? 'Nadia Farouk' : null,
+        date_approved: st !== 'Draft' && st !== 'Submitted' ? I(NOW - (20 - i * 2) * DAY) : null,
+        verified_by: st === 'Verified by Finance' ? 'Tariq Haddad' : null,
+        date_verified: st === 'Verified by Finance' ? I(NOW - (10 - i * 2) * DAY) : null,
+        erp_ses_number: st === 'Verified by Finance' ? 'SES-100' + pad(i + 88, 3) : ''
+      });
+    }
     return D;
   }
 
