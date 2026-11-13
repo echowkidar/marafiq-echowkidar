@@ -46,7 +46,7 @@ button { font-family: inherit; }
 
 /* ---------- Brand mark ---------- */
 .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 800; letter-spacing: 2px; font-size: 26px; }
-.brand svg { width: 32px; height: 32px; flex: none; }
+.brand svg, .brand .brand-mark { width: 36px; height: 36px; flex: none; }
 .brand small { display: block; font-size: 10px; letter-spacing: 1.5px; font-weight: 600; opacity: .75; }
 
 /* ---------- Login ---------- */
@@ -56,8 +56,8 @@ button { font-family: inherit; }
   position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 120px 16px 48px;
   background: #dbe7f3 url("../assets/login-bg.svg?v=4") center / cover no-repeat; color: #1f2a30;
 }
-.login-org { position: absolute; top: 18px; left: 22px; display: flex; align-items: center; gap: 10px; }
-.login-org svg { width: 46px; height: 46px; }
+.login-org { position: absolute; top: 18px; left: 22px; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px; background: rgba(255, 255, 255, .72); backdrop-filter: blur(6px); box-shadow: 0 6px 20px rgba(20, 40, 70, .15); }
+.login-org svg, .login-org .org-mark { width: 52px; height: 52px; }
 .login-org .org-text { display: flex; flex-direction: column; line-height: 1.1; color: #12404a; }
 .login-org .ar { font-family: "Noto Kufi Arabic", sans-serif; font-size: 17px; font-weight: 500; }
 .login-org .en { font-size: 19px; font-weight: 600; letter-spacing: .2px; }
@@ -78,7 +78,7 @@ button { font-family: inherit; }
 .btn-primary { background: var(--brand); color: #fff; border: 0; border-radius: 3px; padding: 14px 24px; font-weight: 600; cursor: pointer; font-size: 16px; }
 .btn-primary:hover { background: var(--brand-dark); }
 @media (max-width: 520px) {
-  .login-org .en { font-size: 16px; } .login-org svg { width: 38px; height: 38px; }
+  .login-org .en { font-size: 16px; } .login-org svg, .login-org .org-mark { width: 42px; height: 42px; }
   .login-card { padding: 26px 22px 34px; }
   .login-product .ar { font-size: 26px; } .login-product .en { font-size: 32px; }
 }
