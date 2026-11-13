@@ -310,6 +310,42 @@ const RULES = {
       return r;
     },
     canDelete: (u, row) => row.booked_by === u.name || atLeast(u, 'Supervisor')
+  },
+  /* ERP invoices: approving or marking paid is a finance/supervisor action */
+  invoices: {
+    update(p, x, u) {
+      if ('status' in x && x.status !== p.status && ['Approved', 'Paid'].includes(x.status) && !atLeast(u, 'Finance') && !atLeast(u, 'Supervisor'))
+        fail('Only finance can approve or pay invoices', 403);
+      if ('paid' in x && x.paid && !p.paid && !atLeast(u, 'Finance') && !atLeast(u, 'Supervisor')) fail('Only finance can mark invoices paid', 403);
+      return { ...p, ...x };
+    }
+  },
+  /* Work Completion Certificate: status/approval changes only via the role-guarded actions (submit/approve/verify) */
+  wcc: {
+    update(p, x, u) {
+      for (const k of ['status', 'engineer_approved_by', 'approved_by', 'finance_verified_by', 'verified_by', 'erp_ses_number', 'date_approved', 'date_verified', 'date_submitted']) {
+        if (k in x && JSON.stringify(x[k]) !== JSON.stringify(p[k])) fail('Use the WCC actions (Submit / Approve / Verify) to change ' + k, 400);
+      }
+      return { ...p, ...x };
+    }
+  },
+  /* Service request: enforce who may change what.
+     - triage / dispatch / reject / assignment / priority / target  -> Supervisor (facilities engineer) only
+     - cancel, rating and feedback                                   -> the requestor (own) or a Supervisor
+     - other field edits (notes etc.) are open to any signed-in user */
+  service_requests: {
+    update(p, x, u) {
+      const changed = (k) => k in x && JSON.stringify(x[k]) !== JSON.stringify(p[k]);
+      const owns = p.requestor_username ? p.requestor_username === u.username : true;
+      const ENGINEER_STATES = ['In Triage', 'Dispatched', 'Rejected'];
+      const engineerFields = ['assigned_team', 'wr_id', 'priority', 'target_completion', 'dispatched_to'];
+      if ((changed('status') && ENGINEER_STATES.includes(x.status)) || engineerFields.some(changed)) {
+        if (!atLeast(u, 'Supervisor')) fail('Only a supervisor / facilities engineer can triage, dispatch or reject service requests', 403);
+      }
+      if (changed('status') && x.status === 'Cancelled' && !owns && !atLeast(u, 'Supervisor')) fail('You can only cancel your own service requests', 403);
+      if ((changed('rating') || changed('satisfaction_rating') || changed('feedback') || changed('feedback_notes')) && !owns && !atLeast(u, 'Supervisor')) fail('You can only rate your own service requests', 403);
+      return { ...p, ...x };
+    }
   }
 };
 const READ_ONLY = new Set(['sites', 'buildings', 'floors', 'trades', 'work_teams', 'craftspersons', 'projects', 'departments', 'divisions']);
@@ -494,13 +530,14 @@ const ACTIONS = {
     approve(p, b, u) {
       if (!atLeast(u, 'Supervisor')) fail('Only a supervisor/engineer can approve WCCs', 403);
       if (p.status !== 'Submitted') fail('Only submitted WCCs can be approved', 409);
-      const r = { ...p, status: 'Approved by Engineer', approved_by: u.name, date_approved: now() };
+      const r = { ...p, status: 'Approved by Engineer', engineer_approved_by: u.name, approved_by: u.name, date_approved: now() };
       return { row: r };
     },
     verify(p, b, u) {
       if (!atLeast(u, 'Finance') && !atLeast(u, 'Supervisor')) fail('Only finance can verify WCCs for ERP payment', 403);
-      const ses = b.erp_ses_number || 'SES-100' + String(p.id).padStart(3, '0');
-      const r = { ...p, status: 'Verified by Finance', verified_by: u.name, date_verified: now(), erp_ses_number: ses };
+      if (p.status !== 'Approved by Engineer') fail('Only engineer-approved WCCs can be verified', 409);
+      const ses = b.erp_ses_number || 'SES-' + (840000 + (numPart(p.id) || 0));
+      const r = { ...p, status: 'Verified by Finance', finance_verified_by: u.name, verified_by: u.name, date_verified: now(), erp_ses_number: ses };
       return { row: r };
     }
   },

@@ -580,8 +580,8 @@
     filters: [fT('wr_id', 'Work Request Code'), fT('release_order', 'Release Order'), fT('invoice_no', 'Invoice No.'), fS('status', 'Status', ['Draft', 'Submitted', 'Approved', 'Paid']), fD('invoice_date', 'Invoice Date')],
     rowActions: [{ label: 'Details', details: true },
       { label: 'Submit', show: (r) => r.status === 'Draft', onClick: (row, ctx, api) => { DB.update('invoices', row.id, { status: 'Submitted' }); UI.toast('Invoice submitted'); refresh(api); } },
-      { label: 'Approve', show: (r) => r.status === 'Submitted', onClick: (row, ctx, api) => { DB.update('invoices', row.id, { status: 'Approved' }); UI.toast('Invoice approved'); refresh(api); } },
-      { label: 'Mark Paid', show: (r) => r.status === 'Approved', onClick: (row, ctx, api) => { DB.update('invoices', row.id, { status: 'Paid', paid: true }); UI.toast('Invoice marked as paid'); refresh(api); } }] };
+      { label: 'Approve', show: (r) => r.status === 'Submitted' && ['Finance', 'Supervisor', 'Administrator'].includes(me().role), onClick: (row, ctx, api) => { if (DB.update('invoices', row.id, { status: 'Approved' })) { UI.toast('Invoice approved'); refresh(api); } } },
+      { label: 'Mark Paid', show: (r) => r.status === 'Approved' && ['Finance', 'Supervisor', 'Administrator'].includes(me().role), onClick: (row, ctx, api) => { if (DB.update('invoices', row.id, { status: 'Paid', paid: true })) { UI.toast('Invoice marked as paid'); refresh(api); } } }] };
 
   /* ---------------------------------------------------------- HSE docs / error docs / ISO ---------------------------------------------------------- */
   V['hse-documents'] = { type: 'grid', title: 'PTW HSE Documents', gridTitle: 'PTW HSE Documents', table: 'hse_docs', sort: { field: 'date_uploaded', dir: 'desc' },
@@ -1062,7 +1062,7 @@
 
         const stepper = UI.h(`<div style="margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:20px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div><b style="font-size:16px;color:var(--text)">${esc(sr.req_code)}</b> &mdash; <span class="badge ${STATUS_CLASS(sr.status)}">${esc(sr.status)}</span></div>
+            <div><b style="font-size:16px;color:var(--text)">${esc(sr.req_code)}</b> &mdash; <span class="badge ${UI.statusClass(sr.status)}">${esc(sr.status)}</span></div>
             <div style="font-size:12.5px;color:var(--muted)">Target Date: <b>${esc(UI.fmtDate(sr.target_completion) || 'Within 24h')}</b></div>
           </div>
           ${stepIdx < 0 ? `<div class="badge bad" style="font-size:13px;padding:6px 12px">Request ${esc(sr.status)}: ${esc(sr.rejection_reason || 'Request closed before completion.')}</div>` : `
@@ -1383,7 +1383,7 @@
           <td>${esc(UI.fmtDate(d.date))}</td>
           <td>${esc(d.slot)}</td>
           <td>${esc(d.booked_by)}</td>
-          <td><span class="badge ${STATUS_CLASS(d.status)}">${esc(d.status)}</span></td>
+          <td><span class="badge ${UI.statusClass(d.status)}">${esc(d.status)}</span></td>
           <td>
             ${d.status === 'Active' ? `<button class="btn green" data-checkin="${esc(d.id)}">Check In</button> <button class="btn" data-del-dsk="${esc(d.id)}">Cancel</button>` : ''}
           </td>
@@ -1445,7 +1445,7 @@
     ],
     sort: { field: 'id', dir: 'desc' },
     rowActions: [
-      { label: 'Triage & Accept', show: (r) => r.status === 'Requested', onClick: (r, ctx, g) => {
+      { label: 'Triage & Accept', show: (r) => r.status === 'Requested' && ['Supervisor', 'Administrator'].includes(me().role), onClick: (r, ctx, g) => {
         const f = UI.buildForm([{ title: 'Triage Request', fields: [
           fld('priority', 'Priority', 'select', { options: PRIO, default: String(r.priority || 3), required: true }),
           fld('target_completion', 'Agreed Target Completion', 'date', { default: r.target_completion || new Date(Date.now() + 2*DAY).toISOString().slice(0, 10), required: true }),
@@ -1462,7 +1462,7 @@
           }
         }]);
       }},
-      { label: 'Dispatch to WR', show: (r) => ['Requested', 'In Triage'].includes(r.status), onClick: (r, ctx, g) => {
+      { label: 'Dispatch to WR', show: (r) => ['Requested', 'In Triage'].includes(r.status) && ['Supervisor', 'Administrator'].includes(me().role), onClick: (r, ctx, g) => {
         const catObj = SR_CATEGORIES.find(c => c.name === r.category);
         const f = UI.buildForm([{ title: 'Dispatch to Maintenance Team', fields: [
           fld('work_team', 'Work Team', 'select', { options: teamOpts, required: true }),
@@ -1493,7 +1493,7 @@
           }
         }]);
       }},
-      { label: 'Reject', show: (r) => ['Requested', 'In Triage'].includes(r.status), onClick: (r, ctx, g) => {
+      { label: 'Reject', show: (r) => ['Requested', 'In Triage'].includes(r.status) && ['Supervisor', 'Administrator'].includes(me().role), onClick: (r, ctx, g) => {
         const reason = prompt('Rejection reason:');
         if (reason) {
           DB.update('service_requests', r.id, { status: 'Rejected', rejection_reason: reason });
@@ -1787,18 +1787,18 @@
     ],
     sort: { field: 'id', dir: 'desc' },
     rowActions: [
-      { label: 'Approve (Engineer)', show: (r) => r.status === 'Submitted', cls: 'primary', onClick: (r, ctx, g) => {
+      { label: 'Approve (Engineer)', show: (r) => r.status === 'Submitted' && ['Supervisor', 'Administrator'].includes(me().role), cls: 'primary', onClick: (r, ctx, g) => {
         if (confirm('Approve WCC ' + r.wcc_number + ' as Facilities Engineer?')) {
-          DB.update('wcc', r.id, { status: 'Approved by Engineer', engineer_approved_by: me().name || 'Facilities Engineer' });
+          if (!DB.action('wcc', r.id, 'approve')) return;
           UI.toast('WCC ' + r.wcc_number + ' approved and forwarded to Finance');
           g.refresh();
         }
       }},
-      { label: 'Verify for ERP (SES)', show: (r) => r.status === 'Approved by Engineer', cls: 'primary', onClick: (r, ctx, g) => {
+      { label: 'Verify for ERP (SES)', show: (r) => r.status === 'Approved by Engineer' && ['Finance', 'Supervisor', 'Administrator'].includes(me().role), cls: 'primary', onClick: (r, ctx, g) => {
         if (confirm('Verify WCC ' + r.wcc_number + ' and generate Oracle Fusion SES entry?')) {
-          const sesNo = 'SES-' + (840000 + Math.floor(Math.random() * 99999));
-          DB.update('wcc', r.id, { status: 'Verified by Finance', finance_verified_by: me().name || 'Finance Controller', erp_ses_number: sesNo });
-          UI.toast(`WCC Verified & Service Entry Sheet ${sesNo} created in Oracle Fusion`);
+          const res = DB.action('wcc', r.id, 'verify');
+          if (!res) return;
+          UI.toast(`WCC Verified & Service Entry Sheet ${res.erp_ses_number} created in Oracle Fusion`);
           g.refresh();
         }
       }},
@@ -2196,6 +2196,8 @@
         </div>
       </div>`);
 
+      root.appendChild(wrap); // attach before building charts so Chart.js can measure the canvases
+
       if (window.Chart) {
         const c1 = wrap.querySelector('[data-c1]');
         const c2 = wrap.querySelector('[data-c2]');
@@ -2237,8 +2239,6 @@
           }
         });
       }
-
-      root.appendChild(wrap);
     }
   };
 

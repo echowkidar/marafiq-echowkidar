@@ -451,7 +451,7 @@
   }
 
   const UI = window.SONU_UI = {
-    esc, h, fmtDate, fmtDT, fmtNum, exportCSV, modal, buildForm,
+    esc, h, fmtDate, fmtDT, fmtNum, exportCSV, modal, buildForm, statusClass: STATUS_CLASS,
     toast(msg, err) { const t = h(`<div class="toast ${err ? 'err' : ''}">${esc(msg)}</div>`); document.body.appendChild(t); setTimeout(() => t.remove(), 3200); },
     detailsModal(title, row, columns) {
       const cols = columns && columns.length ? columns : Object.keys(row).map((k) => ({ field: k, label: k }));
