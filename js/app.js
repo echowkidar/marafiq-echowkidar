@@ -18,7 +18,7 @@
     shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>'
   };
-  const LOGO = '<img class="brand-mark" src="assets/logo-mark.svg?v=2" alt="">';
+  const LOGO = '<img class="brand-mark" src="assets/logo-mark.svg?v=2" width="36" height="36" alt="">';
 
   /* ---------- favorites (per browser) ---------- */
   const FAV_KEY = 'sonu_favs_' + user.username;

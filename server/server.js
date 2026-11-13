@@ -509,15 +509,42 @@ async function api(req, res, url) {
 /* ============================== static ============================== */
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const PUBLIC = [/^\/(index|app)\.html$/, /^\/css\/[\w.-]+\.css$/, /^\/js\/[\w.-]+\.js$/, /^\/assets\/[\w.-]+$/];
+/* Cache busting: every css/js/assets reference in HTML, CSS and JS responses gets ?v=<content hash>,
+   so a deploy can never be mixed with stale copies held by browsers or Cloudflare. Versioned requests
+   are cached for a year (immutable); unversioned ones and HTML are always revalidated. */
+const versions = new Map(); // abs path -> { mtimeMs, size, v }
+function versionOf(rel) {
+  const f = path.join(ROOT, rel);
+  try {
+    const st = fs.statSync(f); const c = versions.get(f);
+    if (c && c.mtimeMs === st.mtimeMs && c.size === st.size) return c.v;
+    const v = crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex').slice(0, 10);
+    versions.set(f, { mtimeMs: st.mtimeMs, size: st.size, v }); return v;
+  } catch (e) { return null; }
+}
+function stampRefs(text, baseDir) {
+  const stamp = (ref) => { const rel = path.posix.normalize(path.posix.join(baseDir, ref)); const v = versionOf(rel); return v ? `${ref}?v=${v}` : ref; };
+  return text
+    .replace(/((?:href|src)=["'])((?:\.\.\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["'])/g, (m, a, ref, b) => a + stamp(ref) + b)
+    .replace(/(url\(["']?)((?:\.\.\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["']?\))/g, (m, a, ref, b) => a + stamp(ref) + b);
+}
 function serveStatic(req, res, url) {
   let p = decodeURIComponent(url.pathname);
   if (p === '/') p = '/index.html';
   if (!PUBLIC.some((r) => r.test(p))) return send(res, 404, 'Not found');
-  const f = path.join(ROOT, p);
+  const f = path.join(ROOT, p); const ext = path.extname(f);
   fs.readFile(f, (err, data) => {
     if (err) return send(res, 404, 'Not found');
-    res.writeHead(200, { 'Content-Type': (TYPES[path.extname(f)] || 'application/octet-stream') + '; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
-    res.end(data);
+    let body = data;
+    // CSS url()s resolve against the stylesheet; HTML/JS strings resolve against the page (site root)
+    if (['.html', '.css', '.js'].includes(ext)) body = stampRefs(data.toString('utf8'), ext === '.css' ? path.posix.dirname(p) : '/');
+    const versioned = url.searchParams.has('v') && ext !== '.html';
+    res.writeHead(200, {
+      'Content-Type': (TYPES[ext] || 'application/octet-stream') + '; charset=utf-8',
+      'Cache-Control': versioned ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin'
+    });
+    res.end(body);
   });
 }
 
