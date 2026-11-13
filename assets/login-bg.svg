@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <!-- Original illustration for SONU: sky, two lattice towers, a triangulated canopy and a glass pavilion -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b9cfe6"/>
+      <stop offset=".55" stop-color="#dbe7f3"/>
+      <stop offset="1" stop-color="#f3f6fa"/>
+    </linearGradient>
+    <linearGradient id="towerA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f7f9fb"/>
+      <stop offset=".55" stop-color="#e6ebf1"/>
+      <stop offset="1" stop-color="#c9d3de"/>
+    </linearGradient>
+    <linearGradient id="towerB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eef2f6"/>
+      <stop offset="1" stop-color="#cfd8e2"/>
+    </linearGradient>
+    <linearGradient id="canopy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef1f5"/>
+      <stop offset="1" stop-color="#d7dee6"/>
+    </linearGradient>
+    <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".75"/>
+    </linearGradient>
+    <pattern id="diamond" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
+      <path d="M0 0H26M0 0V26" stroke="#b7c3d0" stroke-width="1.2" fill="none"/>
+    </pattern>
+    <pattern id="tri" width="120" height="104" patternUnits="userSpaceOnUse" patternTransform="rotate(-14)">
+      <path d="M0 104 L60 0 L120 104 M0 0 H120 M0 104 H120 M30 52 H90" stroke="#9aa7b5" stroke-width="2" fill="none"/>
+      <path d="M60 0 L30 52 L90 52 Z" fill="#c7d0da" opacity=".35"/>
+    </pattern>
+    <pattern id="glass" width="40" height="34" patternUnits="userSpaceOnUse">
+      <rect width="40" height="34" fill="#dfe7ef"/>
+      <path d="M0 0H40M0 0V34" stroke="#9fb0c1" stroke-width="2"/>
+      <rect x="3" y="4" width="34" height="26" fill="#c8d6e4" opacity=".7"/>
+    </pattern>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)"/>
+
+  <!-- triangulated canopy sweeping in from the top right -->
+  <path d="M760 0 H1600 V560 C1460 470 1290 360 1130 250 C990 155 860 70 760 0 Z" fill="url(#canopy)"/>
+  <path d="M760 0 H1600 V560 C1460 470 1290 360 1130 250 C990 155 860 70 760 0 Z" fill="url(#tri)"/>
+  <path d="M760 0 C860 70 990 155 1130 250 C1290 360 1460 470 1600 560" fill="none" stroke="#f8fafc" stroke-width="10"/>
+
+  <!-- tall lattice tower (left) -->
+  <path d="M230 900 C250 640 285 330 318 40 L338 30 C350 300 372 620 420 900 Z" fill="url(#towerA)"/>
+  <path d="M230 900 C250 640 285 330 318 40 L338 30 C350 300 372 620 420 900 Z" fill="url(#diamond)" opacity=".8"/>
+  <path d="M318 40 C300 330 265 640 246 900" stroke="#ffffff" stroke-width="6" fill="none"/>
+
+  <!-- second tower -->
+  <path d="M470 900 C495 690 525 430 548 120 L566 112 C580 380 610 650 668 900 Z" fill="url(#towerB)"/>
+  <path d="M470 900 C495 690 525 430 548 120 L566 112 C580 380 610 650 668 900 Z" fill="url(#diamond)" opacity=".7"/>
+  <path d="M548 120 C530 430 500 690 484 900" stroke="#ffffff" stroke-width="5" fill="none"/>
+
+  <!-- curved shell in the lower left -->
+  <path d="M0 520 C120 600 190 720 220 900 H0 Z" fill="#e4e9ef"/>
+  <path d="M0 520 C120 600 190 720 220 900" stroke="#ffffff" stroke-width="8" fill="none"/>
+
+  <!-- glass pavilion along the bottom right -->
+  <path d="M760 900 V720 C980 690 1300 640 1600 600 V900 Z" fill="url(#glass)"/>
+  <path d="M760 720 C980 690 1300 640 1600 600" stroke="#ffffff" stroke-width="14" fill="none"/>
+  <path d="M760 760 C980 732 1300 684 1600 646" stroke="#f1f4f7" stroke-width="5" fill="none"/>
+
+  <rect y="600" width="1600" height="300" fill="url(#haze)"/>
+</svg>
