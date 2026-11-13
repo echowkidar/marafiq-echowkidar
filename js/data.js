@@ -291,7 +291,7 @@
     x.setRequestHeader('Content-Type', 'application/json');
     try { x.send(body === undefined ? null : JSON.stringify(body)); } catch (e) { return { ok: false, status: 0, body: { error: 'Server is not reachable. Is it running?' } }; }
     let parsed = null; try { parsed = x.responseText ? JSON.parse(x.responseText) : null; } catch (e) { parsed = { error: x.responseText }; }
-    if (x.status === 401 && !/\/api\/auth\/login$/.test(url) && location.pathname.indexOf('index.html') < 0) { location.replace('index.html'); }
+    if (x.status === 401 && !/\/api\/auth\/login$/.test(url) && location.pathname !== '/' && location.pathname !== '/login') { location.replace('/'); }
     return { ok: x.status >= 200 && x.status < 300, status: x.status, body: parsed };
   }
   const report = (r) => { const msg = (r.body && r.body.error) || ('Request failed (' + r.status + ')'); if (window.SONU_UI) window.SONU_UI.toast(msg, true); else alert(msg); };

@@ -508,7 +508,7 @@ async function api(req, res, url) {
 
 /* ============================== static ============================== */
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
-const PUBLIC = [/^\/(index|app)\.html$/, /^\/css\/[\w.-]+\.css$/, /^\/js\/[\w.-]+\.js$/, /^\/assets\/[\w.-]+$/];
+const PUBLIC = [/^\/(index|app)\.html$/,/^\/css\/[\w.-]+\.css$/, /^\/js\/[\w.-]+\.js$/, /^\/assets\/[\w.-]+$/];
 /* Cache busting: every css/js/assets reference in HTML, CSS and JS responses gets ?v=<content hash>,
    so a deploy can never be mixed with stale copies held by browsers or Cloudflare. Versioned requests
    are cached for a year (immutable); unversioned ones and HTML are always revalidated. */
@@ -523,14 +523,19 @@ function versionOf(rel) {
   } catch (e) { return null; }
 }
 function stampRefs(text, baseDir) {
-  const stamp = (ref) => { const rel = path.posix.normalize(path.posix.join(baseDir, ref)); const v = versionOf(rel); return v ? `${ref}?v=${v}` : ref; };
+  const stamp = (ref) => { const rel = ref[0] === '/' ? path.posix.normalize(ref) : path.posix.normalize(path.posix.join(baseDir, ref)); const v = versionOf(rel); return v ? `${ref}?v=${v}` : ref; };
   return text
-    .replace(/((?:href|src)=["'])((?:\.\.\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["'])/g, (m, a, ref, b) => a + stamp(ref) + b)
-    .replace(/(url\(["']?)((?:\.\.\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["']?\))/g, (m, a, ref, b) => a + stamp(ref) + b);
+    .replace(/((?:href|src)=["'])((?:\.\.\/|\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["'])/g, (m, a, ref, b) => a + stamp(ref) + b)
+    .replace(/(url\(["']?)((?:\.\.\/|\/)?(?:css|js|assets)\/[\w./-]+?)(?:\?v=[\w.-]*)?(["']?\))/g, (m, a, ref, b) => a + stamp(ref) + b);
 }
+function redirect(res, loc) { res.writeHead(301, { Location: loc, 'Cache-Control': 'no-cache' }); res.end(); }
 function serveStatic(req, res, url) {
-  let p = decodeURIComponent(url.pathname);
-  if (p === '/') p = '/index.html';
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch (e) { return send(res, 400, 'Bad request'); }
+  if (p === '/index.html') return redirect(res, '/' + url.search);
+  if (p === '/app.html') return redirect(res, '/app' + url.search);
+  if (p === '/' || p === '/login') p = '/index.html';
+  else if (p === '/app' || p.startsWith('/app/')) p = '/app.html';
   if (!PUBLIC.some((r) => r.test(p))) return send(res, 404, 'Not found');
   const f = path.join(ROOT, p); const ext = path.extname(f);
   fs.readFile(f, (err, data) => {

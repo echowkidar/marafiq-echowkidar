@@ -1,8 +1,8 @@
 /* SONU app shell: auth guard, sidebar (modules > processes > tasks), search, favorites,
-   header/user menu, hash router (#/home, #/v/<viewId>?id=..), home dashboard. */
+   header/user menu, History API router (/app, /app/<viewId>?id=..), home dashboard. */
 (function () {
   const UI = window.SONU_UI, esc = UI.esc, h = UI.h;
-  if (!DB.init()) { location.replace('index.html'); return; }
+  if (!DB.init()) { location.replace('/'); return; }
   const user = DB.me();
   const isAdmin = user.role === 'Administrator';
   const MENU = window.SONU_MENU.filter((m) => !m.adminOnly || isAdmin);
@@ -18,7 +18,7 @@
     shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>'
   };
-  const LOGO = '<img class="brand-mark" src="assets/logo-mark.svg?v=2" width="36" height="36" alt="">';
+  const LOGO = '<img class="brand-mark" src="/assets/logo-mark.svg?v=2" width="36" height="36" alt="">';
 
   /* ---------- favorites (per browser) ---------- */
   const FAV_KEY = 'sonu_favs_' + user.username;
@@ -80,6 +80,8 @@
   let openSide = null;
   const overlay = document.getElementById('navOverlay');
   function closeDrawers() { d1.classList.remove('open'); d2.classList.remove('open'); shell.classList.remove('drawer-open'); openSide = null; nav.querySelectorAll('.side-item').forEach((x) => x.classList.remove('active')); }
+  /* .current marks the module of the page being shown (stays while drawers open/close) */
+  function setCurrent(id) { nav.querySelectorAll('.side-item').forEach((x) => x.classList.toggle('current', x.dataset.s === id)); }
   function markActive(id) { nav.querySelectorAll('.side-item').forEach((x) => x.classList.toggle('active', x.dataset.s === id)); }
   function openD1() { d1.classList.add('open'); shell.classList.add('drawer-open'); }
   overlay.onclick = closeDrawers;
@@ -148,7 +150,7 @@
   }
   nav.querySelectorAll('.side-item').forEach((el) => el.onclick = () => {
     const id = el.dataset.s;
-    if (id === 'home') { closeDrawers(); shell.classList.remove('mob-open'); location.hash = '#/home'; return; }
+    if (id === 'home') { closeDrawers(); shell.classList.remove('mob-open'); go('home'); return; }
     if (openSide === id) return closeDrawers();
     closeDrawers(); openSide = id; markActive(id);
     if (id === 'search') showSearch(); else if (id === 'favorites') showFavorites(); else showModule(MENU.find((m) => m.id === id));
@@ -164,11 +166,11 @@
   userMenu.querySelectorAll('[data-u]').forEach((a) => a.onclick = () => {
     userMenu.classList.remove('open');
     const u = a.dataset.u;
-    if (u === 'home') location.hash = '#/home';
-    if (u === 'logout') { DB.logout(); sessionStorage.removeItem('sonu_user'); location.replace('index.html'); }
+    if (u === 'home') go('home');
+    if (u === 'logout') { DB.logout(); sessionStorage.removeItem('sonu_user'); location.replace('/'); }
     if (u === 'reset') { if (confirm('Reset all demo data to its original state?') && DB.reset()) { UI.toast('Demo data reset'); route(); } }
-    if (u === 'audit') location.hash = '#/v/audit-log';
-    if (u === 'admin') location.hash = '#/v/admin-dashboard';
+    if (u === 'audit') go('audit-log');
+    if (u === 'admin') go('admin-dashboard');
     if (u === 'password') {
       const f = UI.buildForm([{ title: 'Change your password', fields: [
         { field: 'current', label: 'Current Password', type: 'text', required: true },
@@ -201,18 +203,27 @@
   };
   function go(view, params = {}, task) {
     const q = Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : '';
-    location.hash = '#/v/' + view + q;
+    history.pushState(null, '', (view === 'home' ? '/app' : '/app/' + view) + q);
+    route();
   }
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    let u; try { u = new URL(a.getAttribute('href'), location.href); } catch (x) { return; }
+    if (u.origin !== location.origin || !(u.pathname === '/app' || u.pathname.startsWith('/app/'))) return;
+    e.preventDefault(); history.pushState(null, '', u.pathname + u.search); route();
+  });
   function setCrumb(parts) { document.getElementById('crumb').innerHTML = parts.map((p, i) => (i === parts.length - 1 ? `<b>${esc(p)}</b>` : esc(p))).join(' › '); }
   function route() {
-    const hash = location.hash || '#/home';
-    const m = hash.match(/^#\/v\/([^?]+)(?:\?(.*))?$/);
-    if (!m) { setCrumb(['Home']); markActive('home'); return renderHome(); }
+    const m = location.pathname.match(/^\/app\/([^/]+)\/?$/);
+    if (!m || m[1] === 'home') { setCrumb(['Home']); setCurrent('home'); return renderHome(); }
     const viewId = decodeURIComponent(m[1]);
-    const params = Object.fromEntries(new URLSearchParams(m[2] || ''));
+    const params = Object.fromEntries(new URLSearchParams(location.search));
     const cfg = window.SONU_VIEWS[viewId];
     const t = TASKS.find((x) => x.view === viewId);
     setCrumb(t ? [t.module.title, t.process.title, t.title] : [cfg ? cfg.title : viewId]);
+    setCurrent(t ? t.module.id : null);
     document.title = (cfg ? cfg.title : 'Not found') + ' — SONU';
     if (!cfg) { content.innerHTML = '<div class="view"><div class="noresults">This page does not exist.</div></div>'; return; }
     if ((cfg.adminOnly && !isAdmin) || (viewId === 'audit-log' && user.role === 'Contractor')) { content.innerHTML = '<div class="view"><div class="noresults">You do not have access to this page.</div></div>'; return; }
@@ -221,7 +232,10 @@
     UI.renderView(content, cfg, Object.assign({}, ctxBase, { params, record }));
     content.scrollTop = 0;
   }
-  window.addEventListener('hashchange', route);
+  window.addEventListener('popstate', route);
+  { const lh = location.hash; // legacy bookmarks: /app.html#/v/<id>?a=b or #/home
+    if (lh.indexOf('#/v/') === 0) history.replaceState(null, '', '/app/' + lh.slice(4));
+    else if (lh.indexOf('#/home') === 0) history.replaceState(null, '', '/app'); }
 
   /* ---------- home dashboard ---------- */
   function renderHome() {
@@ -254,7 +268,7 @@
     bar.querySelectorAll('input').forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') bar.querySelector('#hFilter').click(); }));
     bar.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => go(b.dataset.v));
 
-    const GRID_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><rect x="1" y="1" width="6" height="6" fill="#f59e0b"/><rect x="9" y="1" width="6" height="6" fill="#0f766e"/><rect x="1" y="9" width="6" height="6" fill="#0f766e"/><rect x="9" y="9" width="6" height="6" fill="#f59e0b"/></svg>';
+    const GRID_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><rect x="1" y="1" width="6" height="6" fill="#f59e0b"/><rect x="9" y="1" width="6" height="6" fill="#2563eb"/><rect x="1" y="9" width="6" height="6" fill="#2563eb"/><rect x="9" y="9" width="6" height="6" fill="#f59e0b"/></svg>';
     const mapPanel = h(`<div class="panel home-panel"><div class="panel-head"><span class="ttl">Buildings</span><button class="icon-plain" id="mapToggle" title="Switch between map and list">${GRID_ICON}</button><span class="sp"></span><span style="color:var(--muted);font-size:12px" id="mapCount"></span></div><div id="map"></div><div id="bldList" hidden></div></div>`);
     v.appendChild(mapPanel);
     const splitter = h('<div class="splitter" title="Drag to resize"></div>'); v.appendChild(splitter);
@@ -289,12 +303,12 @@
       if (!window.L) { mapPanel.querySelector('#map').innerHTML = '<div class="noresults">Map library could not load (offline?).</div>'; return; }
       if (!map) { map = L.map('map', { scrollWheelZoom: true, wheelPxPerZoomLevel: 90 }); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map); }
       if (layer) layer.remove();
-      const colors = {}; const pal = ['#0f766e', '#f59e0b', '#2563eb', '#dc2626', '#7c3aed', '#16a34a', '#db2777', '#0891b2'];
+      const colors = {}; const pal = ['#2563eb', '#f59e0b', '#0d9488', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#ea580c'];
       layer = L.layerGroup(list.map((b) => {
         colors[b.site_id] = colors[b.site_id] || pal[Object.keys(colors).length % pal.length];
         const open = DB.all('wr').filter((w) => w.bl_id === b.id && !/Closed|Completed|Cancelled|Rejected/.test(w.status)).length;
-        return L.circleMarker([b.lat, b.lng], { radius: 8, color: '#062b28', weight: 1, fillColor: colors[b.site_id], fillOpacity: .85 })
-          .bindPopup(`<b>${esc(b.name)}</b><br>${esc(b.id)} · Site ${esc(b.site_id)}<br>${esc(b.city)}<br>Open work requests: <b>${open}</b><br><a href="#/v/wr-review?bl_id=${encodeURIComponent(b.id)}">View work requests</a>`);
+        return L.circleMarker([b.lat, b.lng], { radius: 8, color: '#0b1b33', weight: 1, fillColor: colors[b.site_id], fillOpacity: .85 })
+          .bindPopup(`<b>${esc(b.name)}</b><br>${esc(b.id)} · Site ${esc(b.site_id)}<br>${esc(b.city)}<br>Open work requests: <b>${open}</b><br><a href="/app/wr-review?bl_id=${encodeURIComponent(b.id)}">View work requests</a>`);
       })).addTo(map);
       if (list.length) map.fitBounds(L.latLngBounds(list.map((b) => [b.lat, b.lng])).pad(0.2)); else map.setView([25.3, 51.4], 9);
     };

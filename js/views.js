@@ -603,9 +603,9 @@
     const L = window.L; const map = L.map(el); const blds = DB.all('buildings');
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
     const open = {}; DB.all('wr').filter(isOpen).forEach((w) => { open[w.bl_id] = (open[w.bl_id] || 0) + 1; });
-    const pal = ['#0f766e', '#f59e0b', '#2563eb', '#dc2626', '#7c3aed', '#16a34a', '#db2777', '#0891b2']; const sites = DB.all('sites').map((s) => s.id);
-    blds.forEach((b) => L.circleMarker([b.lat, b.lng], { radius: 9, color: '#062b28', weight: 1, fillColor: pal[sites.indexOf(b.site_id) % pal.length], fillOpacity: 0.85 })
-      .bindPopup(`<b>${esc(b.name)}</b><br>${esc(b.id)} &middot; Site ${esc(b.site_id)}<br>${esc(b.city)}<br>Open work requests: <b>${open[b.id] || 0}</b><br><a href="#/v/wr-review?bl_id=${encodeURIComponent(b.id)}">View work requests</a>`).addTo(map));
+    const pal = ['#2563eb', '#f59e0b', '#0d9488', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#ea580c']; const sites = DB.all('sites').map((s) => s.id);
+    blds.forEach((b) => L.circleMarker([b.lat, b.lng], { radius: 9, color: '#0b1b33', weight: 1, fillColor: pal[sites.indexOf(b.site_id) % pal.length], fillOpacity: 0.85 })
+      .bindPopup(`<b>${esc(b.name)}</b><br>${esc(b.id)} &middot; Site ${esc(b.site_id)}<br>${esc(b.city)}<br>Open work requests: <b>${open[b.id] || 0}</b><br><a href="/app/wr-review?bl_id=${encodeURIComponent(b.id)}">View work requests</a>`).addTo(map));
     if (blds.length) map.fitBounds(L.latLngBounds(blds.map((b) => [b.lat, b.lng])).pad(0.2)); else map.setView([25.3, 51.4], 9);
     setTimeout(() => map.invalidateSize(), 100);
   } };
@@ -658,8 +658,8 @@
     const days = ((s.audit || {}).last7days || []), roles = u.byRole || {};
     const p1 = mk('Activity per Day (last 7 days)'), p2 = mk('Users by Role');
     if (!window.Chart) { [p1, p2].forEach((p) => { p.querySelector('.chart-box').innerHTML = '<div class="noresults">Chart library could not load (offline?).</div>'; }); return; }
-    new window.Chart(p1.querySelector('canvas'), { type: 'bar', data: { labels: days.map((d) => d.day), datasets: [{ label: 'Events', data: days.map((d) => d.count), backgroundColor: '#0f766e' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
-    new window.Chart(p2.querySelector('canvas'), { type: 'doughnut', data: { labels: Object.keys(roles), datasets: [{ data: Object.values(roles), backgroundColor: ['#0f766e', '#f59e0b', '#2563eb', '#dc2626'] }] }, options: { responsive: true, maintainAspectRatio: false } });
+    new window.Chart(p1.querySelector('canvas'), { type: 'bar', data: { labels: days.map((d) => d.day), datasets: [{ label: 'Events', data: days.map((d) => d.count), backgroundColor: '#2563eb', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
+    new window.Chart(p2.querySelector('canvas'), { type: 'doughnut', data: { labels: Object.keys(roles), datasets: [{ data: Object.values(roles), backgroundColor: ['#2563eb', '#f59e0b', '#0d9488', '#7c3aed'] }] }, options: { responsive: true, maintainAspectRatio: false } });
   } };
 
   const resolveOpts = (secs) => secs.map((s) => Object.assign({}, s, { fields: s.fields.map((f) => (typeof f.options === 'function' ? Object.assign({}, f, { options: f.options() }) : f)) }));

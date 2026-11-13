@@ -119,7 +119,7 @@
       default:
         ctl = `<input type="text" data-k="${f.field}" id="${id}">`;
     }
-    return `<div class="fld"><label>${esc(f.label)}</label><div class="ctl">${ctl}</div></div>`;
+    return `<div class="fld${f.type === 'daterange' ? ' range' : ''}"><label>${esc(f.label)}</label><div class="ctl">${ctl}</div></div>`;
   }
   function readFilters(root, filters) {
     const vals = {};
@@ -331,7 +331,7 @@
   }
 
   /* ---------- CHART ---------- */
-  const PALETTE = ['#0f766e', '#f59e0b', '#2563eb', '#dc2626', '#7c3aed', '#16a34a', '#db2777', '#0891b2', '#ea580c', '#4f46e5', '#65a30d', '#be123c', '#0d9488', '#ca8a04', '#9333ea', '#475569'];
+  const PALETTE = ['#2563eb', '#f59e0b', '#0d9488', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#ea580c', '#4f46e5', '#dc2626', '#16a34a', '#ca8a04', '#9333ea', '#be123c', '#0f766e', '#475569'];
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function keyOf(row, by, dateGroup) {
     let k = typeof by === 'function' ? by(row) : row[by];
@@ -371,11 +371,12 @@
       const stacked = kind === 'stacked' || kind === 'hstacked';
       const round = kind === 'pie' || kind === 'doughnut';
       const ds = agg.series.map((s, i) => ({
-        label: s, data: agg.data[i], borderWidth: kind === 'line' ? 2 : 0, tension: .3,
+        label: s, data: agg.data[i], borderWidth: kind === 'line' ? 2 : 0, tension: .3, borderRadius: round || kind === 'line' ? 0 : 4, maxBarThickness: 46,
         backgroundColor: round ? agg.labels.map((_, j) => PALETTE[j % PALETTE.length]) : PALETTE[i % PALETTE.length],
         borderColor: PALETTE[i % PALETTE.length]
       }));
       if (chart) chart.destroy();
+      if (window.Chart) { const cs = getComputedStyle(document.documentElement); Chart.defaults.font.family = cs.getPropertyValue('--font').trim() || 'Inter, sans-serif'; Chart.defaults.color = cs.getPropertyValue('--muted').trim(); Chart.defaults.borderColor = cs.getPropertyValue('--line').trim(); }
       if (!window.Chart) { panel.querySelector('.chart-box').innerHTML = '<div class="noresults">Chart library could not load (offline?). Data table below.</div>'; }
       else chart = new Chart(panel.querySelector('canvas'), {
         type: round ? kind : kind === 'line' ? 'line' : 'bar',
